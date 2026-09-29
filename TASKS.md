@@ -1,7 +1,7 @@
 ## Tasks
 - [x] Slice 1: extension stays reachable in background
 - [x] Slice 2: tabs_context and navigate from Claude Code
-- [ ] Slice 3: get_page_text, read_page, find
+- [x] Slice 3: get_page_text, read_page, find
 - [ ] Slice 4: computer click, type, key, scroll
 - [ ] Slice 5: screenshot a tab
 - [ ] Slice 6: javascript_tool and console capture

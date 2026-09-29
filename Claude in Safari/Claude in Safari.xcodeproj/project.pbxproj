@@ -18,6 +18,7 @@
 		F4D19BE2306B9E75001DC152 /* Claude in Safari Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F4D19BE1306B9E75001DC152 /* Claude in Safari Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F4D19BE7306B9E75001DC152 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D19BE6306B9E75001DC152 /* SafariWebExtensionHandler.swift */; };
 		F4D19BF5306B9E75001DC152 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = F4D19BF3306B9E75001DC152 /* background.js */; };
+		F4D19C02306B9E75001DC152 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = F4D19C01306B9E75001DC152 /* content.js */; };
 		F4D19BF6306B9E75001DC152 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = F4D19BF4306B9E75001DC152 /* manifest.json */; };
 /* End PBXBuildFile section */
 
@@ -57,6 +58,7 @@
 		F4D19BE1306B9E75001DC152 /* Claude in Safari Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Claude in Safari Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F4D19BE6306B9E75001DC152 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		F4D19BE8306B9E75001DC152 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F4D19C01306B9E75001DC152 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = ../../extension/content.js; sourceTree = "<group>"; };
 		F4D19BF3306B9E75001DC152 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = ../../extension/background.js; sourceTree = "<group>"; };
 		F4D19BF4306B9E75001DC152 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../extension/manifest.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -131,6 +133,7 @@
 			isa = PBXGroup;
 			children = (
 				F4D19BF3306B9E75001DC152 /* background.js */,
+				F4D19C01306B9E75001DC152 /* content.js */,
 				F4D19BF4306B9E75001DC152 /* manifest.json */,
 			);
 			name = Resources;
@@ -229,6 +232,7 @@
 			files = (
 				F4D19BF6306B9E75001DC152 /* manifest.json in Resources */,
 				F4D19BF5306B9E75001DC152 /* background.js in Resources */,
+				F4D19C02306B9E75001DC152 /* content.js in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */

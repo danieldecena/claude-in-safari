@@ -122,6 +122,30 @@ if (process.argv.includes("--spike")) {
       return text({ context: c.context, ...(await call("navigate", { url, tabId }, c.sock)) });
     },
   );
+  const onTab = async (method, params) => {
+    const c = (await contexts()).find((c) => c.tabs.some((t) => t.tabId === params.tabId));
+    if (!c) throw new Error(`no context owns tab ${params.tabId}; call tabs_context`);
+    return call(method, params, c.sock);
+  };
+  const tabId = z.number().describe("Tab id from tabs_context");
+  server.registerTool(
+    "get_page_text",
+    { description: "Text content of a tab (article or main element if present, else body).", inputSchema: z.object({ tabId }) },
+    async (p) => text(await onTab("get_page_text", p)),
+  );
+  server.registerTool(
+    "read_page",
+    {
+      description: "Accessibility-style tree of a tab with ref_N ids for elements.",
+      inputSchema: z.object({ tabId, filter: z.enum(["all", "interactive"]).optional().describe("interactive limits to links, buttons and fields") }),
+    },
+    async (p) => ({ content: [{ type: "text", text: await onTab("read_page", p) }] }),
+  );
+  server.registerTool(
+    "find",
+    { description: "Find visible elements in a tab whose role, name or href contains the query; returns up to 20 with refs.", inputSchema: z.object({ tabId, query: z.string() }) },
+    async (p) => ({ content: [{ type: "text", text: (await onTab("find", p)).join("\n") || "no matches" }] }),
+  );
   server.registerTool(
     "ping",
     { description: "Check that the Safari extension is connected.", inputSchema: z.object({}) },

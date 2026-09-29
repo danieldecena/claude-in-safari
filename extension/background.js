@@ -28,6 +28,16 @@ function connect() {
   };
 }
 
+// Tabs opened before the extension loaded have no content script, so load it first;
+// content.js guards against running twice.
+async function inPage(tabId, method, params) {
+  await chrome.tabs.executeScript(tabId, { file: "content.js" });
+  const [r] = await chrome.tabs.executeScript(tabId, { code: `window.__cis.run(${JSON.stringify(method)}, ${JSON.stringify(params)})` });
+  if (!r) throw new Error(`no result from tab ${tabId}`);
+  if (r.error) throw new Error(r.error);
+  return r.result;
+}
+
 async function handle(method, params) {
   switch (method) {
     case "ping":
@@ -44,6 +54,10 @@ async function handle(method, params) {
         : await chrome.tabs.update(params.tabId, { url: params.url });
       return { tabId: t.id, windowId: t.windowId };
     }
+    case "get_page_text":
+    case "read_page":
+    case "find":
+      return inPage(params.tabId, method, params);
     default:
       throw new Error(`unknown method: ${method}`);
   }
