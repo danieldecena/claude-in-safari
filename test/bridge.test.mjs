@@ -134,3 +134,58 @@ test("a port held by something that is not a bridge is reported, and the MCP ser
   assert.match(r.text, /in use by something that refused to relay/);
   b.stop(); squatter.close();
 });
+
+// Fake extension for batch: tab 7 exists; computer clicks succeed; javascript "boom" fails;
+// every method name received is recorded in order.
+const scripted = (ws, seen) => ws.on("message", (d) => {
+  const m = JSON.parse(d);
+  seen.push(m.method === "computer" ? `computer:${m.params.ref}` : m.method);
+  if (m.method === "tabs_context") return ws.send(JSON.stringify({ id: m.id, result: [{ tabId: 7, windowId: 1, url: "https://x.test/", title: "x", active: true }] }));
+  if (m.method === "computer") return ws.send(JSON.stringify({ id: m.id, result: { clicked: m.params.ref } }));
+  if (m.method === "javascript" && m.params.code === "boom") return ws.send(JSON.stringify({ id: m.id, error: "boom" }));
+  if (m.method === "javascript") return ws.send(JSON.stringify({ id: m.id, result: { result: 1 } }));
+});
+
+test("batch runs steps in order and stops at the first failure", { timeout: 30000 }, async () => {
+  const port = nextPort++, b = startBridge(port);
+  await b.ready; await new Promise((r) => setTimeout(r, 500));
+  const ws = await dial(port), seen = []; scripted(ws, seen);
+  const r = await b.call("batch", { tabId: 7, steps: [
+    { tool: "computer", args: { action: "click", ref: "ref_1" } },
+    { tool: "javascript", args: { code: "boom" } },
+    { tool: "computer", args: { action: "click", ref: "ref_2" } },
+  ] });
+  assert.ok(!r.error, r.text);
+  assert.match(r.text, /^1\. computer: /m);
+  assert.match(r.text, /^2\. javascript failed: boom$/m);
+  assert.match(r.text, /stopped at step 2 of 3/);
+  assert.doesNotMatch(r.text, /^3\./m);
+  assert.deepEqual(seen.filter((s) => s !== "tabs_context"), ["computer:ref_1", "javascript"]);
+  ws.close(); b.stop();
+});
+
+test("batch with stopOnError false runs every step", { timeout: 30000 }, async () => {
+  const port = nextPort++, b = startBridge(port);
+  await b.ready; await new Promise((r) => setTimeout(r, 500));
+  const ws = await dial(port), seen = []; scripted(ws, seen);
+  const r = await b.call("batch", { tabId: 7, stopOnError: false, steps: [
+    { tool: "javascript", args: { code: "boom" } },
+    { tool: "computer", args: { action: "click", ref: "ref_2" } },
+  ] });
+  assert.match(r.text, /^1\. javascript failed: boom$/m);
+  assert.match(r.text, /^2\. computer: /m);
+  ws.close(); b.stop();
+});
+
+test("batch caps wait at 5000ms and refuses screenshot", { timeout: 30000 }, async () => {
+  const port = nextPort++, b = startBridge(port);
+  await b.ready; await new Promise((r) => setTimeout(r, 500));
+  const ws = await dial(port), seen = []; scripted(ws, seen);
+  const t = Date.now();
+  const w = await b.call("batch", { tabId: 7, steps: [{ tool: "wait", args: { ms: 99999 } }] });
+  assert.match(w.text, /^1\. wait 5000ms$/m);
+  assert.ok(Date.now() - t < 9000, `took ${Date.now() - t}ms`);
+  const s = await b.call("batch", { tabId: 7, steps: [{ tool: "screenshot" }] });
+  assert.ok(s.error, "screenshot must be rejected by the schema");
+  ws.close(); b.stop();
+});

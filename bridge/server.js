@@ -196,6 +196,13 @@ if (process.argv.includes("--spike")) {
   }, 30000);
 } else {
   const server = new McpServer({ name: "claude-in-safari", version: "0.1.0" });
+  // Batchable tools are registered through `tool` so batch can call their handlers directly,
+  // with the same schema parsing (and defaults) as a direct call.
+  const handlers = {};
+  const tool = (name, def, fn) => {
+    handlers[name] = (args) => fn(def.inputSchema.parse(args));
+    server.registerTool(name, def, fn);
+  };
   // Every browser and profile loads its own extension context, and a context only sees its
   // own profile's windows. Contexts with no tabs (STP 27.0 exposes none) are left out.
   const settled = async () => {
@@ -218,12 +225,13 @@ if (process.argv.includes("--spike")) {
     return keepEmpty ? all : all.filter((c) => c.tabs.length);
   };
   const text = (v) => ({ content: [{ type: "text", text: JSON.stringify(v, null, 1) }] });
+  const text_ = (s) => ({ content: [{ type: "text", text: s }] });
   server.registerTool(
     "tabs_context",
     { description: "List open Safari tabs, grouped by extension context (one per Safari profile). A context with no tabs is listed with an empty tabs array; one that failed to answer carries an error.", inputSchema: z.object({}) },
     async () => text((await contexts(true)).map(({ sock, ...c }) => c)),
   );
-  server.registerTool(
+  tool(
     "navigate",
     {
       description: "Open a URL in a new background tab, or load it into an existing tab when tabId is given.",
@@ -248,12 +256,12 @@ if (process.argv.includes("--spike")) {
     return call(method, params, c.sock);
   };
   const tabId = z.number().int().describe("Tab id from tabs_context");
-  server.registerTool(
+  tool(
     "get_page_text",
     { description: "Text content of a tab (article or main element if present, else body), plus a frames list with the text of any iframes.", inputSchema: z.object({ tabId }) },
     async (p) => text(await onTab("get_page_text", p)),
   );
-  server.registerTool(
+  tool(
     "read_page",
     {
       description: "Accessibility-style tree of a tab with ref_N ids for elements.",
@@ -261,7 +269,7 @@ if (process.argv.includes("--spike")) {
     },
     async (p) => ({ content: [{ type: "text", text: await onTab("read_page", p) }] }),
   );
-  server.registerTool(
+  tool(
     "find",
     { description: "Find visible elements in a tab (and its iframes) whose role, name or href contains the query; returns up to 20 with refs. Iframe hits carry f<frameId>: refs that computer accepts.", inputSchema: z.object({ tabId, query: z.string() }) },
     async (p) => ({ content: [{ type: "text", text: (await onTab("find", p)).join("\n") || "no matches" }] }),
@@ -276,7 +284,7 @@ if (process.argv.includes("--spike")) {
       return { content: [{ type: "image", mimeType: m[1], data: m[2] }] };
     },
   );
-  server.registerTool(
+  tool(
     "computer",
     {
       description: "Interact with a tab: click an element, type into a field, press a key, or scroll. Element refs come from read_page or find.",
@@ -293,7 +301,7 @@ if (process.argv.includes("--spike")) {
     },
     async (p) => text(await onTab("computer", p)),
   );
-  server.registerTool(
+  tool(
     "javascript",
     {
       description: "Run JavaScript in a tab and return the last expression's value. Executes in the content-script world: full DOM access, but not the page's own JS variables; synchronous code only.",
@@ -317,7 +325,7 @@ if (process.argv.includes("--spike")) {
     },
     async (p) => ({ content: [{ type: "text", text: (await onTab("read_network", p)).join("\n") || "no resources recorded" }] }),
   );
-  server.registerTool(
+  tool(
     "tab",
     {
       description: "Close, reload, or move back/forward in a tab's history.",
@@ -336,6 +344,41 @@ if (process.argv.includes("--spike")) {
         ...(await call("ping", {}, sock).catch((e) => ({ error: e.message }))),
       })));
       return text(rows);
+    },
+  );
+  const BATCHABLE = ["computer", "javascript", "find", "get_page_text", "read_page", "navigate", "tab"];
+  server.registerTool(
+    "batch",
+    {
+      description: "Run up to 30 tool steps on one tab in order, in one call. Each step is {tool, args}; tabId is inherited. tool: computer, javascript, find, get_page_text, read_page, navigate, tab, or wait ({ms}, max 5000). Stops at the first failing step unless stopOnError is false. Screenshots are not allowed in a batch.",
+      inputSchema: z.object({
+        tabId,
+        steps: z.array(z.object({ tool: z.enum([...BATCHABLE, "wait"]), args: z.record(z.string(), z.any()).optional() })).min(1).max(30),
+        stopOnError: z.boolean().optional(),
+      }),
+    },
+    async ({ tabId, steps, stopOnError = true }) => {
+      const out = [];
+      for (const [i, s] of steps.entries()) {
+        const n = i + 1;
+        try {
+          if (s.tool === "wait") {
+            const ms = Math.min(Math.max(Number(s.args?.ms ?? 0), 0), 5000);
+            await new Promise((r) => setTimeout(r, ms));
+            out.push(`${n}. wait ${ms}ms`);
+            continue;
+          }
+          const r = await handlers[s.tool]({ ...s.args, tabId: s.args?.tabId ?? tabId });
+          out.push(`${n}. ${s.tool}: ${r.content.map((c) => c.text ?? `[${c.type}]`).join("\n")}`);
+        } catch (e) {
+          out.push(`${n}. ${s.tool} failed: ${e.message}`);
+          if (stopOnError) {
+            out.push(`stopped at step ${n} of ${steps.length}`);
+            break;
+          }
+        }
+      }
+      return text_(out.join("\n"));
     },
   );
   await server.connect(new StdioServerTransport());
