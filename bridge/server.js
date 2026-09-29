@@ -120,21 +120,21 @@ if (process.argv.includes("--spike")) {
     const wait = 6000 - (Date.now() - bootedAt);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   };
-  const contexts = async () => {
+  const contexts = async (keepEmpty = false) => {
     await settled();
     const all = await Promise.all([...socks].map(async ([origin, sock]) => ({
       context: origin.slice(-8),
       browser: sock.ua?.match(/Version\/[\d.]+/)?.[0],
       sock,
-      tabs: await call("tabs_context", {}, sock).catch(() => []),
+      ...(await call("tabs_context", {}, sock).then((tabs) => ({ tabs }), (e) => ({ tabs: [], error: e.message }))),
     })));
-    return all.filter((c) => c.tabs.length);
+    return keepEmpty ? all : all.filter((c) => c.tabs.length);
   };
   const text = (v) => ({ content: [{ type: "text", text: JSON.stringify(v, null, 1) }] });
   server.registerTool(
     "tabs_context",
-    { description: "List open Safari tabs, grouped by extension context (one per Safari profile).", inputSchema: z.object({}) },
-    async () => text((await contexts()).map(({ sock, ...c }) => c)),
+    { description: "List open Safari tabs, grouped by extension context (one per Safari profile). A context with no tabs is listed with an empty tabs array; one that failed to answer carries an error.", inputSchema: z.object({}) },
+    async () => text((await contexts(true)).map(({ sock, ...c }) => c)),
   );
   server.registerTool(
     "navigate",
