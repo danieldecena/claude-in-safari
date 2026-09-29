@@ -10,8 +10,8 @@ const TOKEN = readFileSync(new URL("../extension/background.js", import.meta.url
 const ORIGIN = "safari-web-extension://00000000-test";
 let nextPort = 19000 + (process.pid % 500) * 2;
 
-function startBridge(port) {
-  const p = spawn("node", ["server.js"], { cwd: new URL("../bridge/", import.meta.url), env: { ...process.env, CIS_PORT: String(port) }, stdio: ["pipe", "pipe", "pipe"] });
+function startBridge(port, env = {}) {
+  const p = spawn("node", ["server.js"], { cwd: new URL("../bridge/", import.meta.url), env: { ...process.env, CIS_PORT: String(port), ...env }, stdio: ["pipe", "pipe", "pipe"] });
   let buf = "", n = 0, err = "";
   const waiters = new Map();
   p.stderr.on("data", (d) => (err += d));
@@ -99,4 +99,19 @@ test("a busy port is reported, and the MCP server still answers", { timeout: 300
   assert.ok(r.error);
   assert.match(r.text, /in use/);
   first.stop(); second.stop();
+});
+
+test("a bridge stuck on a busy port takes over once the holder exits", { timeout: 30000 }, async () => {
+  const port = nextPort++, first = startBridge(port);
+  await first.ready; await new Promise((r) => setTimeout(r, 500));
+  const second = startBridge(port, { CIS_BIND_RETRY_MS: "300" });
+  await second.ready; await new Promise((r) => setTimeout(r, 500));
+  assert.match((await second.call("ping")).text, /in use/, "precondition: second must be blocked first");
+  first.stop();
+  await new Promise((r) => setTimeout(r, 1500));
+  const ws = await dial(port); tabsReply(ws);
+  assert.equal(typeof ws, "object", "second bridge must now own the port");
+  const r = await second.call("tabs_context");
+  assert.ok(!r.error, r.text);
+  ws.close(); second.stop();
 });

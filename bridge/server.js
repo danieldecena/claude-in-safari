@@ -9,6 +9,7 @@ import * as z from "zod/v4";
 import { readFileSync } from "node:fs";
 
 const PORT = Number(process.env.CIS_PORT ?? 18765);
+const BIND_RETRY_MS = Number(process.env.CIS_BIND_RETRY_MS ?? 3000);
 const TIMEOUT_MS = 15000;
 
 const log = (...a) => console.error(new Date().toISOString(), ...a);
@@ -30,29 +31,41 @@ const pending = new Map();
 
 // A web page or another extension can also dial ws://127.0.0.1; require the extension
 // origin scheme plus the shared token, since any Safari extension gets that scheme.
-const wss = new WebSocketServer({
-  host: "127.0.0.1",
-  port: PORT,
-  verifyClient: ({ origin, req }) => {
-    const ok = origin?.startsWith("safari-web-extension://")
-      && new URL(req.url, "ws://127.0.0.1").searchParams.get("token") === TOKEN;
-    if (!ok) log("rejected connection from origin", origin);
-    return ok;
-  },
-});
-
-// A second Claude session starts a second bridge on the same port. Without this handler the
+// A second Claude session starts a second bridge on the same port. Without an error handler the
 // EADDRINUSE error is unhandled and kills the process, so the MCP server never comes up.
-// Stay alive instead; every call then reports why it has no extension.
+// Stay alive instead, report why calls have no extension, and retry the bind so this bridge
+// takes over once the holder exits.
 let listenError = null;
-wss.on("error", (e) => {
-  listenError = e.code === "EADDRINUSE"
-    ? `port ${PORT} is in use, probably by another Claude Code session's bridge`
-    : `bridge socket error: ${e.message}`;
-  log(listenError);
-});
+function bind() {
+  const wss = new WebSocketServer({
+    host: "127.0.0.1",
+    port: PORT,
+    verifyClient: ({ origin, req }) => {
+      const ok = origin?.startsWith("safari-web-extension://")
+        && new URL(req.url, "ws://127.0.0.1").searchParams.get("token") === TOKEN;
+      if (!ok) log("rejected connection from origin", origin);
+      return ok;
+    },
+  });
+  wss.on("listening", () => {
+    if (listenError) log(`bound port ${PORT} after retrying`);
+    listenError = null;
+  });
+  wss.on("error", (e) => {
+    const inUse = e.code === "EADDRINUSE";
+    listenError = inUse
+      ? `port ${PORT} is in use, probably by another Claude Code session's bridge; retrying every ${BIND_RETRY_MS / 1000}s`
+      : `bridge socket error: ${e.message}`;
+    log(listenError);
+    if (inUse) {
+      wss.close();
+      setTimeout(bind, BIND_RETRY_MS);
+    }
+  });
+  wss.on("connection", onConnection);
+}
 
-wss.on("connection", (sock, req) => {
+function onConnection(sock, req) {
   const origin = req.headers.origin;
   log("extension connected", origin);
   socks.get(origin)?.close();
@@ -82,7 +95,9 @@ wss.on("connection", (sock, req) => {
     if (socks.get(origin) === sock) socks.delete(origin);
     if (ext === sock) ext = [...socks.values()].at(-1) ?? null;
   });
-});
+}
+
+bind();
 
 function call(method, params = {}, target = ext) {
   if (!target) return Promise.reject(new Error(listenError ?? "Safari extension not connected. Is Safari open with Claude in Safari enabled?"));
