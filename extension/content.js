@@ -5,19 +5,21 @@
 // (their refs reset, so re-run read_page after an update). No top-level bindings here:
 // executeScript re-runs this file in the same isolated world, and a top-level const
 // would throw a redeclaration SyntaxError on every call after the first.
-if ((window.__cis?.version ?? 0) < 3) {
-  const CIS_VERSION = 3;
+if ((window.__cis?.version ?? 0) < 4) {
+  const CIS_VERSION = 4;
 
   // Console capture (manifest injects this file at document_start so early logs are seen).
   // console.* runs in the page world, so a hook is injected there and relayed via postMessage;
   // pages with a strict CSP block the inline hook and only window error events get captured.
+  const push = (level, text) => {
+    const logs = window.__cis_logs;
+    logs.push({ t: Date.now(), level, text: String(text).slice(0, 2000) });
+    if (logs.length > 500) logs.splice(0, logs.length - 500);
+  };
+  const fmt = (a) => { try { return typeof a === "string" ? a : JSON.stringify(a); } catch { return String(a); } };
+  const LEVELS = ["log", "info", "warn", "error", "debug"];
   if (!window.__cis_logs) {
-    const logs = [];
-    window.__cis_logs = logs;
-    const push = (level, text) => {
-      logs.push({ t: Date.now(), level, text: String(text).slice(0, 2000) });
-      if (logs.length > 500) logs.splice(0, logs.length - 500);
-    };
+    window.__cis_logs = [];
     window.addEventListener("message", (ev) => {
       if (ev.source === window && ev.data?.__cis_console) push(ev.data.__cis_console.level, ev.data.__cis_console.text);
     });
@@ -192,13 +194,24 @@ if ((window.__cis?.version ?? 0) < 3) {
     return { scrollX: Math.round(scrollX), scrollY: Math.round(scrollY), maxY: Math.max(0, document.documentElement.scrollHeight - innerHeight) };
   };
 
+  // The content-script world has its own console, which the page-world hook never sees;
+  // wrap it for the duration of the eval so the code's own logs reach read_console.
   const javascript = ({ code }) => {
-    const result = (0, eval)(code);
+    const orig = {};
+    for (const level of LEVELS) {
+      orig[level] = console[level];
+      console[level] = (...args) => { push(level, args.map(fmt).join(" ")); return orig[level].apply(console, args); };
+    }
     try {
-      JSON.stringify(result);
-      return { result: result === undefined ? "undefined" : result };
-    } catch {
-      return { result: String(result) };
+      const result = (0, eval)(code);
+      try {
+        JSON.stringify(result);
+        return { result: result === undefined ? "undefined" : result };
+      } catch {
+        return { result: String(result) };
+      }
+    } finally {
+      Object.assign(console, orig);
     }
   };
 
@@ -208,14 +221,47 @@ if ((window.__cis?.version ?? 0) < 3) {
     return lines;
   };
 
-  const ACTIONS = { click, type, key: keyPress, scroll };
+  const set = ({ ref, value }) => {
+    if (value === undefined) throw new Error("set needs value");
+    const el = deref(ref);
+    el.scrollIntoView({ block: "center" });
+    if (el.tagName === "SELECT") {
+      const want = String(value);
+      const opts = [...el.options];
+      const opt = opts.find((o) => o.value === want) ?? opts.find((o) => o.text.trim() === want);
+      if (!opt) throw new Error(`no option "${want}" in ${ref}; options: ${opts.map((o) => JSON.stringify(o.text.trim())).join(", ")}`);
+      el.value = opt.value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (el.type === "checkbox" || el.type === "radio") {
+      if (typeof value !== "boolean") throw new Error(`${ref} is a ${el.type}; value must be true or false`);
+      if (el.checked !== value) el.click();
+    } else {
+      return type({ ref, text: String(value) });
+    }
+    return { set: describe(el, roleOf(el) ?? "element") };
+  };
+
+  const ACTIONS = { click, type, key: keyPress, scroll, set };
   const computer = (params) => {
     const fn = ACTIONS[params.action];
     if (!fn) throw new Error(`unknown action: ${params.action}`);
     return fn(params);
   };
 
-  const handlers = { get_page_text: getPageText, read_page: readPage, find, computer, javascript, read_console: readConsole };
+  const readNetwork = ({ clear = false } = {}) => {
+    const rows = performance.getEntriesByType("resource").map((e) =>
+      `${e.initiatorType} ${e.responseStatus || "?"} ${Math.round(e.duration)}ms ${e.transferSize ?? "?"}B ${e.name}`);
+    if (clear) performance.clearResourceTimings();
+    return rows;
+  };
+
+  const navHistory = ({ action }) => {
+    action === "back" ? history.back() : history.forward();
+    return {};
+  };
+
+  const handlers = { get_page_text: getPageText, read_page: readPage, find, computer, javascript, read_console: readConsole, read_network: readNetwork, history: navHistory };
   window.__cis = {
     version: CIS_VERSION,
     run: (method, params) => {

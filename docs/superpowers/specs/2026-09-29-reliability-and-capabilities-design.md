@@ -1,6 +1,6 @@
 # Reliability and capabilities pass
 
-Status: approved in chat 2026-09-29, awaiting spec review. Touches `extension/content.js`,
+Status: implemented and verified 2026-09-29. Touches `extension/content.js`,
 `extension/background.js`, `bridge/server.js`, `README.md`.
 
 ## Goal
@@ -25,6 +25,10 @@ Replace with: hold until the bridge process is 6s old (5s cap plus 1s margin). T
 error path is unchanged (wait up to 10s, then `no Safari extension connected`). Calls after
 the bridge is 6s old never wait.
 
+**`navigate` waits for the load.** Found in testing: the retry alone let a page tool
+called right after `navigate` read the previous document. `navigate` now resolves on
+`tabs.onUpdated` status `complete` (10s cap).
+
 Unchanged: the `window.__cis` version guard.
 
 ## 2. Console fix
@@ -41,9 +45,8 @@ returning `cis-marker` (the slice 6 done-when as originally written).
 ## 3. Tab control
 
 New tool `tab`: `{ tabId, action: "close" | "back" | "forward" | "reload" }`.
-`close` uses `chrome.tabs.remove`, `reload` uses `chrome.tabs.reload`. Whether Safari
-implements `chrome.tabs.goBack/goForward` is unverified: test it first; if absent, run
-`history.back()` / `history.forward()` through `inPage` instead. Returns `{ tabId, action }`.
+`close` uses `chrome.tabs.remove`, `reload` uses `chrome.tabs.reload`. `back` and `forward` run `history.back()` / `history.forward()` through `inPage` (the
+`chrome.tabs.goBack` route was not tried). Returns `{ tabId, action }`.
 The bridge routes it through `onTab`, so `close` on an unknown tab errors
 `no context owns tab N`.
 

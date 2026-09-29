@@ -6,6 +6,9 @@
 - [x] Slice 5: screenshot a tab
 - [x] Slice 6: javascript_tool and console capture
 - [x] Slice 7: token, docs, Browser Lanes entry
+- [x] Reliability pass and console fix
+- [x] tab, read_network and computer set tools
+- [x] Claude icon for the extension and app
 
 <!-- resume-footer -->
 ---

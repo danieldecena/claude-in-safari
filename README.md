@@ -58,8 +58,8 @@ claude mcp add claude-in-safari -- node "$PWD/bridge/server.js"
 ```
 
 Tools: `tabs_context`, `navigate`, `get_page_text`, `read_page`, `find`,
-`computer` (click / type / key / scroll), `javascript`, `read_console`,
-`screenshot`, `ping`.
+`computer` (click / type / key / scroll / set), `javascript`, `read_console`,
+`read_network`, `tab` (close / reload / back / forward), `screenshot`, `ping`.
 
 ## Security
 
@@ -92,5 +92,9 @@ between pings means Safari killed and restarted the background page.
   `~/developer/safari-automation`.
 - **Console capture is per-tab since injection** and pages with a strict CSP only
   capture window errors, not `console.*` calls.
+- **Network capture is timing entries only.** `read_network` reads
+  `performance.getEntriesByType("resource")`: url, initiator, duration and size. No
+  method, headers or bodies (Safari has no debugger API), and the status is always `?`
+  because Safari 27 does not expose `responseStatus`. Buffer is about the last 250 entries.
 - **Screenshots briefly activate background tabs** (captureVisibleTab only sees the
   active tab); the previously active tab is restored after.

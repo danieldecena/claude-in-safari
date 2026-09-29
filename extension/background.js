@@ -34,12 +34,26 @@ function connect() {
 
 // Tabs opened before the extension loaded have no content script, so load it first;
 // content.js guards against running twice.
+// A tab that is still loading (right after navigate) returns nothing from executeScript, so
+// retry for a few seconds before giving up. Errors the page's own code raised are not retried.
 async function inPage(tabId, method, params) {
-  await chrome.tabs.executeScript(tabId, { file: "content.js" });
-  const [r] = await chrome.tabs.executeScript(tabId, { code: `window.__cis.run(${JSON.stringify(method)}, ${JSON.stringify(params)})` });
-  if (!r) throw new Error(`no result from tab ${tabId}`);
-  if (r.error) throw new Error(r.error);
-  return r.result;
+  const code = `window.__cis.run(${JSON.stringify(method)}, ${JSON.stringify(params)})`;
+  const deadline = Date.now() + 5000;
+  let last = "no result";
+  while (Date.now() < deadline) {
+    try {
+      await chrome.tabs.executeScript(tabId, { file: "content.js" });
+      const [r] = await chrome.tabs.executeScript(tabId, { code });
+      if (r?.error) throw Object.assign(new Error(r.error), { fromPage: true });
+      if (r) return r.result;
+      last = "no result";
+    } catch (e) {
+      if (e.fromPage) throw e;
+      last = String(e?.message ?? e);
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`tab ${tabId} did not accept the script (still loading or not scriptable): ${last}`);
 }
 
 async function handle(method, params) {
@@ -53,9 +67,21 @@ async function handle(method, params) {
     }
     case "navigate": {
       if (!/^https?:\/\//.test(params.url)) throw new Error("navigate: url must start with http:// or https://");
-      const t = params.tabId == null
-        ? await chrome.tabs.create({ url: params.url, active: false })
-        : await chrome.tabs.update(params.tabId, { url: params.url });
+      // Without this wait, a page tool called right after navigate can read the previous
+      // document, which executeScript still accepts while the new one loads.
+      let loaded;
+      const done = new Promise((r) => (loaded = r));
+      let t;
+      const onUpdated = (id, change) => { if (id === (params.tabId ?? t?.id) && change.status === "complete") loaded(); };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+      try {
+        t = params.tabId == null
+          ? await chrome.tabs.create({ url: params.url, active: false })
+          : await chrome.tabs.update(params.tabId, { url: params.url });
+        await Promise.race([done, new Promise((r) => setTimeout(r, 10000))]);
+      } finally {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+      }
       return { tabId: t.id, windowId: t.windowId };
     }
     case "screenshot": {
@@ -71,12 +97,21 @@ async function handle(method, params) {
       if (prev && prev.id !== params.tabId) await chrome.tabs.update(prev.id, { active: true });
       return { dataUrl };
     }
+    case "tab": {
+      const { tabId, action } = params;
+      if (action === "close") await chrome.tabs.remove(tabId);
+      else if (action === "reload") await chrome.tabs.reload(tabId);
+      else if (action === "back" || action === "forward") await inPage(tabId, "history", { action });
+      else throw new Error(`tab: unknown action ${action}`);
+      return { tabId, action };
+    }
     case "get_page_text":
     case "read_page":
     case "find":
     case "computer":
     case "javascript":
     case "read_console":
+    case "read_network":
       return inPage(params.tabId, method, params);
     default:
       throw new Error(`unknown method: ${method}`);

@@ -12,6 +12,7 @@ const PORT = 18765;
 const TIMEOUT_MS = 15000;
 
 const log = (...a) => console.error(new Date().toISOString(), ...a);
+const bootedAt = Date.now();
 
 // Shared secret read from the extension source, the single place it is defined; the
 // extension sends it back as ?token= when dialing (see CIS_TOKEN in background.js).
@@ -91,13 +92,13 @@ if (process.argv.includes("--spike")) {
   // Every browser and profile loads its own extension context, and a context only sees its
   // own profile's windows. Contexts with no tabs (STP 27.0 exposes none) are left out.
   const settled = async () => {
-    // A fresh bridge has no sockets until the extensions redial (backoff up to 5s), and an
-    // empty list must not read as "no tabs open". Wait for the first, then let the rest join.
-    if (!socks.size) {
-      for (let i = 0; i < 100 && !socks.size; i++) await new Promise((r) => setTimeout(r, 100));
-      if (!socks.size) throw new Error("no Safari extension connected. Is Safari open with Claude in Safari enabled?");
-      await new Promise((r) => setTimeout(r, 2000));
-    }
+    // A fresh bridge has no sockets until the extensions redial (backoff cap 5s), and an
+    // empty or short list must not read as "no tabs open". Wait for the first socket, then
+    // until the bridge is older than the redial cap so every context has had time to join.
+    for (let i = 0; i < 100 && !socks.size; i++) await new Promise((r) => setTimeout(r, 100));
+    if (!socks.size) throw new Error("no Safari extension connected. Is Safari open with Claude in Safari enabled?");
+    const wait = 6000 - (Date.now() - bootedAt);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   };
   const contexts = async () => {
     await settled();
@@ -174,9 +175,10 @@ if (process.argv.includes("--spike")) {
       description: "Interact with a tab: click an element, type into a field, press a key, or scroll. Element refs come from read_page or find.",
       inputSchema: z.object({
         tabId,
-        action: z.enum(["click", "type", "key", "scroll"]),
+        action: z.enum(["click", "type", "key", "scroll", "set"]),
         ref: z.string().optional().describe("ref_N target; required for click and type, optional for key and scroll"),
         text: z.string().optional().describe("type: text to put in the field (replaces its value)"),
+        value: z.union([z.string(), z.boolean()]).optional().describe("set: option value or text for a select, true/false for a checkbox or radio, text for other fields"),
         key: z.string().optional().describe("key: key name like Enter, Escape, Tab, ArrowDown, or a single character"),
         direction: z.enum(["up", "down", "left", "right"]).optional().describe("scroll: direction; omit it but pass ref to scroll that element into view"),
         amount: z.number().optional().describe("scroll: distance in px, default 80% of the viewport"),
@@ -199,6 +201,22 @@ if (process.argv.includes("--spike")) {
       inputSchema: z.object({ tabId, clear: z.boolean().optional().describe("Empty the buffer after reading") }),
     },
     async (p) => ({ content: [{ type: "text", text: (await onTab("read_console", p)).join("\n") || "console buffer empty" }] }),
+  );
+  server.registerTool(
+    "read_network",
+    {
+      description: "Resources a tab loaded (scripts, images, fetch/XHR) as initiator, status, duration, size and url. Timing entries only: no request method, headers or bodies, and the status is '?' where Safari does not report it. Buffer is roughly the last 250 entries.",
+      inputSchema: z.object({ tabId, clear: z.boolean().optional().describe("Empty the buffer after reading") }),
+    },
+    async (p) => ({ content: [{ type: "text", text: (await onTab("read_network", p)).join("\n") || "no resources recorded" }] }),
+  );
+  server.registerTool(
+    "tab",
+    {
+      description: "Close, reload, or move back/forward in a tab's history.",
+      inputSchema: z.object({ tabId, action: z.enum(["close", "reload", "back", "forward"]) }),
+    },
+    async (p) => text(await onTab("tab", p)),
   );
   server.registerTool(
     "ping",
