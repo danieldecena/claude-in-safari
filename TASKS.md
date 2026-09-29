@@ -3,7 +3,7 @@
 - [ ] Safari speed T2: parallel subframes + ad-frame skip
 - [ ] Safari speed T3: shadow DOM, checkVisibility, 8s budget
 - [ ] Safari speed T4: async javascript (parked promise + poll)
-- [ ] Safari speed T5: batch tool in the bridge
+- [x] Safari speed T5: batch tool in the bridge -- b240952
 - [ ] Safari speed T6: recipes + skill upload copies
 
 ## Completed
