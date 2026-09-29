@@ -90,14 +90,17 @@ if (process.argv.includes("--spike")) {
   const server = new McpServer({ name: "claude-in-safari", version: "0.1.0" });
   // Every browser and profile loads its own extension context, and a context only sees its
   // own profile's windows. Contexts with no tabs (STP 27.0 exposes none) are left out.
-  const contexts = async () => {
-    // A fresh bridge has no sockets until the extensions redial (backoff up to 30s), and an
+  const settled = async () => {
+    // A fresh bridge has no sockets until the extensions redial (backoff up to 5s), and an
     // empty list must not read as "no tabs open". Wait for the first, then let the rest join.
     if (!socks.size) {
       for (let i = 0; i < 100 && !socks.size; i++) await new Promise((r) => setTimeout(r, 100));
       if (!socks.size) throw new Error("no Safari extension connected. Is Safari open with Claude in Safari enabled?");
       await new Promise((r) => setTimeout(r, 2000));
     }
+  };
+  const contexts = async () => {
+    await settled();
     const all = await Promise.all([...socks].map(async ([origin, sock]) => ({
       context: origin.slice(-8),
       browser: sock.ua?.match(/Version\/[\d.]+/)?.[0],
@@ -200,7 +203,15 @@ if (process.argv.includes("--spike")) {
   server.registerTool(
     "ping",
     { description: "Check that the Safari extension is connected.", inputSchema: z.object({}) },
-    async () => ({ content: [{ type: "text", text: JSON.stringify(await call("ping")) }] }),
+    async () => {
+      await settled();
+      const rows = await Promise.all([...socks].map(async ([origin, sock]) => ({
+        context: origin.slice(-8),
+        browser: sock.ua?.match(/Version\/[\d.]+/)?.[0],
+        ...(await call("ping", {}, sock).catch((e) => ({ error: e.message }))),
+      })));
+      return text(rows);
+    },
   );
   await server.connect(new StdioServerTransport());
 }
