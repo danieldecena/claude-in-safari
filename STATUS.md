@@ -5,11 +5,12 @@
 - read_page / find / computer / javascript reach iframes; bare iframes get a `[frame fN]` header; stale frameIds fail fast.
 - read_page shows `autocomplete` / `passwordrules`; password values show length only.
 - Private remote: github.com/danieldecena/claude-in-safari.
-- Installed app is Developer ID signed and notarized (spctl: "Notarized Developer ID"); extension loads in Safari 27.2 and STP.
+- Installed app is Developer ID signed and notarized (spctl: "Notarized Developer ID"); extension loads in Safari 27.2 and STP, and survives a Safari restart with "Allow unsigned extensions" off.
+- Toolbar popup shows "Connected to bridge" and Reconnect reconnects (user-observed; Safari on Sidecar cannot be screen-captured).
 
 ## Known broken
 - iCloud Mail tab refuses scripts ("Could not execute script in tab"); likely per-site permission, uninvestigated.
-- STP (Version/27.0): extension contexts connect but `tabs.query` returns 0 tabs, despite a LinkedIn tab open, website access Allow, and an STP restart. Safari 27.2 is unaffected.
+- STP (Version/27.0): extension contexts connect but `tabs.query` returns 0 tabs, despite a LinkedIn tab open, website access Allow, and an STP restart. Safari 27.2 is unaffected. After the notarized reinstall, STP context `d5624250` listed its Start Page tab; recheck with a real site before closing.
 
 ## Next Up
 - Nothing queued; see TASKS.md.
