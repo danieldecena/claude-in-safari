@@ -1,4 +1,10 @@
 ## Tasks
+- [ ] Safari speed T1: bench page tools, record baseline
+- [ ] Safari speed T2: parallel subframes + ad-frame skip
+- [ ] Safari speed T3: shadow DOM, checkVisibility, 8s budget
+- [ ] Safari speed T4: async javascript (parked promise + poll)
+- [ ] Safari speed T5: batch tool in the bridge
+- [ ] Safari speed T6: recipes + skill upload copies
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript
