@@ -1,0 +1,4 @@
+node_modules/
+DerivedData/
+build/
+.DS_Store

@@ -1,0 +1,16 @@
+{
+  "name": "claude-in-safari-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "spike": "node server.js --spike"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.2.0",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  }
+}
