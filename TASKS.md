@@ -1,6 +1,7 @@
 ## Tasks
 - [x] Act inside iframes: computer, find, javascript
-- [ ] Fail fast on unknown javascript frameId
+- [x] Fail fast on unknown javascript frameId — bff9b2c
+- [x] Mask password field values in read_page and find
 - [x] Slice 1: extension stays reachable in background
 - [x] Slice 2: tabs_context and navigate from Claude Code
 - [x] Slice 3: get_page_text, read_page, find
