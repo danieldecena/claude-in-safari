@@ -5,6 +5,7 @@
 - read_page / find / computer / javascript reach iframes; bare iframes get a `[frame fN]` header; stale frameIds fail fast.
 - read_page shows `autocomplete` / `passwordrules`; password values show length only.
 - Private remote: github.com/danieldecena/claude-in-safari.
+- Installed app is Developer ID signed and notarized (spctl: "Notarized Developer ID"); extension loads in Safari 27.2 and STP.
 
 ## Known broken
 - iCloud Mail tab refuses scripts ("Could not execute script in tab"); likely per-site permission, uninvestigated.
@@ -21,3 +22,4 @@
 - Decided: repo is private because `CIS_TOKEN` is committed in `extension/background.js`.
 - Finding: a Safari toggle does not always restart every extension context; context `bb428ddd` (started 14:19) survived three toggles running old background.js. Quit and reopen STP to clear.
 - Finding: after reinstall, STP contexts see 0 tabs through grant, restart, and "Other Websites: Allow"; each STP launch also opens two contexts. Live checks verified on Safari 27.2 only.
+- Decided: notarize via xcodebuild Release with Developer ID flags, then re-sign appex then app with their own entitlements minus `get-task-allow` (Apple rejects it). Do not use `CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO`: the sandbox comes from the `ENABLE_APP_SANDBOX` build setting, so it vanishes too, notarization still passes, and pluginkit silently never registers the extension. Credentials: keychain profile `notary`.
