@@ -24,7 +24,7 @@ function connect() {
   };
   ws.onclose = () => {
     setTimeout(connect, backoff);
-    backoff = Math.min(backoff * 2, 30000);
+    backoff = Math.min(backoff * 2, 5000);
   };
 }
 
@@ -33,6 +33,17 @@ async function handle(method, params) {
     case "ping":
       // uptimeMs resetting between pings means Safari killed and restarted the worker.
       return { pong: true, startedAt, uptimeMs: Date.now() - startedAt };
+    case "tabs_context": {
+      const tabs = await chrome.tabs.query({});
+      return tabs.map((t) => ({ tabId: t.id, windowId: t.windowId, url: t.url, title: t.title, active: t.active }));
+    }
+    case "navigate": {
+      if (!/^https?:\/\//.test(params.url)) throw new Error("navigate: url must start with http:// or https://");
+      const t = params.tabId == null
+        ? await chrome.tabs.create({ url: params.url, active: false })
+        : await chrome.tabs.update(params.tabId, { url: params.url });
+      return { tabId: t.id, windowId: t.windowId };
+    }
     default:
       throw new Error(`unknown method: ${method}`);
   }

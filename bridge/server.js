@@ -39,7 +39,10 @@ wss.on("connection", (sock, req) => {
   ext = sock;
   sock.on("message", (data) => {
     const msg = JSON.parse(data);
-    if (msg.type === "hello") return log("hello", origin, "startedAt", new Date(msg.startedAt).toISOString(), msg.ua);
+    if (msg.type === "hello") {
+      sock.ua = msg.ua;
+      return log("hello", origin, "startedAt", new Date(msg.startedAt).toISOString(), msg.ua);
+    }
     const p = pending.get(msg.id);
     if (!p) return;
     pending.delete(msg.id);
@@ -76,6 +79,49 @@ if (process.argv.includes("--spike")) {
   }, 30000);
 } else {
   const server = new McpServer({ name: "claude-in-safari", version: "0.1.0" });
+  // Every browser and profile loads its own extension context, and a context only sees its
+  // own profile's windows. Contexts with no tabs (STP 27.0 exposes none) are left out.
+  const contexts = async () => {
+    // A fresh bridge has no sockets until the extensions redial (backoff up to 30s), and an
+    // empty list must not read as "no tabs open". Wait for the first, then let the rest join.
+    if (!socks.size) {
+      for (let i = 0; i < 100 && !socks.size; i++) await new Promise((r) => setTimeout(r, 100));
+      if (!socks.size) throw new Error("no Safari extension connected. Is Safari open with Claude in Safari enabled?");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const all = await Promise.all([...socks].map(async ([origin, sock]) => ({
+      context: origin.slice(-8),
+      browser: sock.ua?.match(/Version\/[\d.]+/)?.[0],
+      sock,
+      tabs: await call("tabs_context", {}, sock).catch(() => []),
+    })));
+    return all.filter((c) => c.tabs.length);
+  };
+  const text = (v) => ({ content: [{ type: "text", text: JSON.stringify(v, null, 1) }] });
+  server.registerTool(
+    "tabs_context",
+    { description: "List open Safari tabs, grouped by extension context (one per Safari profile).", inputSchema: z.object({}) },
+    async () => text((await contexts()).map(({ sock, ...c }) => c)),
+  );
+  server.registerTool(
+    "navigate",
+    {
+      description: "Open a URL in a new background tab, or load it into an existing tab when tabId is given.",
+      inputSchema: z.object({
+        url: z.string().describe("http:// or https:// URL"),
+        tabId: z.number().optional().describe("Existing tab to navigate; omit to open a new background tab"),
+        context: z.string().optional().describe("Context from tabs_context; needed only for a new tab when several profiles are open"),
+      }),
+    },
+    async ({ url, tabId, context }) => {
+      const cs = await contexts();
+      const c = tabId != null ? cs.find((c) => c.tabs.some((t) => t.tabId === tabId))
+        : context ? cs.find((c) => c.context === context)
+        : cs.length === 1 ? cs[0] : null;
+      if (!c) throw new Error(tabId != null ? `no context owns tab ${tabId}` : `pass context, one of: ${cs.map((c) => `${c.context} (${c.browser})`).join(", ") || "(none connected)"}`);
+      return text({ context: c.context, ...(await call("navigate", { url, tabId }, c.sock)) });
+    },
+  );
   server.registerTool(
     "ping",
     { description: "Check that the Safari extension is connected.", inputSchema: z.object({}) },
