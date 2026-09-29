@@ -6,11 +6,18 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { WebSocketServer } from "ws";
 import * as z from "zod/v4";
+import { readFileSync } from "node:fs";
 
 const PORT = 18765;
 const TIMEOUT_MS = 15000;
 
 const log = (...a) => console.error(new Date().toISOString(), ...a);
+
+// Shared secret read from the extension source, the single place it is defined; the
+// extension sends it back as ?token= when dialing (see CIS_TOKEN in background.js).
+const TOKEN = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8")
+  .match(/^const CIS_TOKEN = "(\w+)"/m)?.[1];
+if (!TOKEN) throw new Error("CIS_TOKEN not found in extension/background.js");
 
 // One socket per extension context: every browser and every Safari profile loads its own
 // copy, each with a distinct safari-web-extension:// origin. A new connection from a known
@@ -20,13 +27,15 @@ let ext = null;
 let nextId = 1;
 const pending = new Map();
 
-// A web page can also dial ws://127.0.0.1; only the extension's origin is accepted.
+// A web page or another extension can also dial ws://127.0.0.1; require the extension
+// origin scheme plus the shared token, since any Safari extension gets that scheme.
 const wss = new WebSocketServer({
   host: "127.0.0.1",
   port: PORT,
-  verifyClient: ({ origin }) => {
-    const ok = origin?.startsWith("safari-web-extension://");
-    if (!ok) log("rejected origin", origin);
+  verifyClient: ({ origin, req }) => {
+    const ok = origin?.startsWith("safari-web-extension://")
+      && new URL(req.url, "ws://127.0.0.1").searchParams.get("token") === TOKEN;
+    if (!ok) log("rejected connection from origin", origin);
     return ok;
   },
 });
@@ -145,6 +154,48 @@ if (process.argv.includes("--spike")) {
     "find",
     { description: "Find visible elements in a tab whose role, name or href contains the query; returns up to 20 with refs.", inputSchema: z.object({ tabId, query: z.string() }) },
     async (p) => ({ content: [{ type: "text", text: (await onTab("find", p)).join("\n") || "no matches" }] }),
+  );
+  server.registerTool(
+    "screenshot",
+    { description: "Screenshot the visible area of a tab as PNG (briefly activates the tab if it is in the background).", inputSchema: z.object({ tabId }) },
+    async (p) => {
+      const { dataUrl } = await onTab("screenshot", p);
+      const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!m) throw new Error(`unexpected screenshot format: ${dataUrl.slice(0, 40)}`);
+      return { content: [{ type: "image", mimeType: m[1], data: m[2] }] };
+    },
+  );
+  server.registerTool(
+    "computer",
+    {
+      description: "Interact with a tab: click an element, type into a field, press a key, or scroll. Element refs come from read_page or find.",
+      inputSchema: z.object({
+        tabId,
+        action: z.enum(["click", "type", "key", "scroll"]),
+        ref: z.string().optional().describe("ref_N target; required for click and type, optional for key and scroll"),
+        text: z.string().optional().describe("type: text to put in the field (replaces its value)"),
+        key: z.string().optional().describe("key: key name like Enter, Escape, Tab, ArrowDown, or a single character"),
+        direction: z.enum(["up", "down", "left", "right"]).optional().describe("scroll: direction; omit it but pass ref to scroll that element into view"),
+        amount: z.number().optional().describe("scroll: distance in px, default 80% of the viewport"),
+      }),
+    },
+    async (p) => text(await onTab("computer", p)),
+  );
+  server.registerTool(
+    "javascript",
+    {
+      description: "Run JavaScript in a tab and return the last expression's value. Executes in the content-script world: full DOM access, but not the page's own JS variables; synchronous code only.",
+      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned") }),
+    },
+    async (p) => text(await onTab("javascript", p)),
+  );
+  server.registerTool(
+    "read_console",
+    {
+      description: "Console output and page errors captured in a tab since load (up to 500 entries). Pages with a strict CSP only capture errors, not console.* calls.",
+      inputSchema: z.object({ tabId, clear: z.boolean().optional().describe("Empty the buffer after reading") }),
+    },
+    async (p) => ({ content: [{ type: "text", text: (await onTab("read_console", p)).join("\n") || "console buffer empty" }] }),
   );
   server.registerTool(
     "ping",

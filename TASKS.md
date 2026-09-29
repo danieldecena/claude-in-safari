@@ -2,10 +2,10 @@
 - [x] Slice 1: extension stays reachable in background
 - [x] Slice 2: tabs_context and navigate from Claude Code
 - [x] Slice 3: get_page_text, read_page, find
-- [ ] Slice 4: computer click, type, key, scroll
-- [ ] Slice 5: screenshot a tab
-- [ ] Slice 6: javascript_tool and console capture
-- [ ] Slice 7: token, docs, Browser Lanes entry
+- [x] Slice 4: computer click, type, key, scroll
+- [x] Slice 5: screenshot a tab
+- [x] Slice 6: javascript_tool and console capture
+- [x] Slice 7: token, docs, Browser Lanes entry
 
 <!-- resume-footer -->
 ---
