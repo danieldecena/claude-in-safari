@@ -160,8 +160,13 @@ async function handle(method, params) {
       if (!frames.some((f) => f.frameId === frameId)) throw new Error(`${params.ref}: frame ${frameId} no longer exists; re-run read_page or find`);
       return inPage(params.tabId, method, { ...params, ref: m[2] }, frameId);
     }
-    case "javascript":
+    case "javascript": {
+      if (params.frameId) {
+        const frames = await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch(() => []);
+        if (!frames.some((f) => f.frameId === params.frameId)) throw new Error(`frame ${params.frameId} no longer exists; re-run read_page`);
+      }
       return inPage(params.tabId, method, params, params.frameId);
+    }
     case "read_console":
     case "read_network":
       return inPage(params.tabId, method, params);

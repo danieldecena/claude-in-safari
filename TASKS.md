@@ -1,5 +1,6 @@
 ## Tasks
 - [x] Act inside iframes: computer, find, javascript
+- [ ] Fail fast on unknown javascript frameId
 - [x] Slice 1: extension stays reachable in background
 - [x] Slice 2: tabs_context and navigate from Claude Code
 - [x] Slice 3: get_page_text, read_page, find
@@ -13,7 +14,7 @@
 
 <!-- resume-footer -->
 ---
-Plan approved 2026-09-29 06:31.
+Plan approved 2026-09-29 06:38.
 
 Sessions start in "plan" (permissions.defaultMode in
 ~/.claude/settings.json). Bypass is reachable in the Shift+Tab cycle only
@@ -22,7 +23,7 @@ when launched via `cb` (--allow-dangerously-skip-permissions); `yolo`
 
 Only if Claude Code actually closed:
 
-    claude --resume 4930778c-85d1-4722-8e7c-037d8872415d
+    claude --resume f75fb6ab-d6e4-482b-9a67-aee1ea9d1881
 
 (`-c` resumes the most recent session; bare `--resume` opens a searchable picker.)
 <!-- /resume-footer -->
