@@ -5,8 +5,8 @@
 // (their refs reset, so re-run read_page after an update). No top-level bindings here:
 // executeScript re-runs this file in the same isolated world, and a top-level const
 // would throw a redeclaration SyntaxError on every call after the first.
-if ((window.__cis?.version ?? 0) < 6) {
-  const CIS_VERSION = 6;
+if ((window.__cis?.version ?? 0) < 7) {
+  const CIS_VERSION = 7;
 
   // Console capture (manifest injects this file at document_start so early logs are seen).
   // console.* runs in the page world, so a hook is injected there and relayed via postMessage;
@@ -88,6 +88,10 @@ if ((window.__cis?.version ?? 0) < 6) {
     line += ` [${refFor(el)}]`;
     if (el.href) line += ` href="${el.href}"`;
     if (el.type && el.tagName === "INPUT") line += ` type="${el.type}"`;
+    const ac = el.getAttribute("autocomplete");
+    if (ac) line += ` autocomplete="${ac}"`;
+    const rules = el.getAttribute("passwordrules");
+    if (rules) line += ` passwordrules="${rules}"`;
     if ("value" in el && el.value && el.tagName !== "BUTTON" && !/^(button|submit|reset)$/.test(el.type)) line += ` value="${String(el.value).slice(0, 60)}"`;
     return line;
   };

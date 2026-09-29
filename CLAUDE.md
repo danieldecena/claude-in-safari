@@ -13,7 +13,8 @@ Read README.md first for what this is and how the pieces connect.
 - **No top-level bindings in `content.js`.** `tabs.executeScript` re-runs the file in
   the same isolated world; a top-level `const` throws a redeclaration SyntaxError on
   the second run. Everything lives inside the `window.__cis` version guard — bump
-  `CIS_VERSION` when handlers change so already-open pages replace theirs.
+  `CIS_VERSION` when handlers change so already-open pages replace theirs, and bump the
+  literal in the guard line above it to match (it cannot reference the const).
 - **`CIS_TOKEN` is defined once**, in `extension/background.js`; the bridge regex-parses
   it from that file at startup (`^const CIS_TOKEN = "(\w+)"`). Renaming or reformatting
   that line breaks the bridge's startup.
