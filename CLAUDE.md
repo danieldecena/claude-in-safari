@@ -26,6 +26,9 @@ Read README.md first for what this is and how the pieces connect.
 xcodebuild -project "Claude in Safari/Claude in Safari.xcodeproj" \
   -scheme "Claude in Safari" -configuration Debug \
   -derivedDataPath DerivedData build
+rm -rf "$HOME/Applications/Claude in Safari.app"   # ditto merges into an existing bundle, breaking the signature
+ditto "DerivedData/Build/Products/Debug/Claude in Safari.app" \
+  "$HOME/Applications/Claude in Safari.app"
 cd bridge && pnpm spike   # connectivity check, no MCP
 ```
 

@@ -3,6 +3,16 @@
   "name": "Claude in Safari",
   "version": "0.1.0",
   "description": "Lets Claude Code drive Safari tabs through a local MCP bridge.",
+  "icons": {
+    "16": "images/icon-16.png",
+    "32": "images/icon-32.png",
+    "48": "images/icon-48.png",
+    "64": "images/icon-64.png",
+    "96": "images/icon-96.png",
+    "128": "images/icon-128.png",
+    "256": "images/icon-256.png",
+    "512": "images/icon-512.png"
+  },
   "permissions": [
     "tabs",
     "activeTab",
