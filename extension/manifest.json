@@ -1,21 +1,17 @@
 {
-  "manifest_version": 3,
+  "manifest_version": 2,
   "name": "Claude in Safari",
   "version": "0.1.0",
   "description": "Lets Claude Code drive Safari tabs through a local MCP bridge.",
   "permissions": [
     "tabs",
     "activeTab",
-    "scripting",
     "storage",
     "alarms",
-    "webNavigation"
-  ],
-  "host_permissions": [
+    "webNavigation",
     "<all_urls>"
   ],
   "background": {
-    "scripts": ["background.js"],
-    "persistent": true
+    "scripts": ["background.js"]
   }
 }
