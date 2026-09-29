@@ -1,4 +1,6 @@
 ## Tasks
+
+## Completed
 - [x] Act inside iframes: computer, find, javascript
 - [x] Fail fast on unknown javascript frameId — bff9b2c
 - [x] Mask password field values in read_page and find
