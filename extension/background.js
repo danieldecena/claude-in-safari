@@ -66,8 +66,16 @@ async function inPage(tabId, method, params, frameId) {
 // living in an iframe (iCloud Mail) is not invisible. Refs are per-frame memory, so subframe
 // refs are tagged f<frameId>: and computer routes them back to that frame. A frame that will not take the
 // script (sandboxed, still loading) is skipped: the top-frame answer stands on its own.
+async function allFrames(tabId) {
+  return (await chrome.webNavigation.getAllFrames({ tabId }).catch(() => [])) ?? [];
+}
+
+async function requireFrame(tabId, frameId, what, hint) {
+  if (!(await allFrames(tabId)).some((f) => f.frameId === frameId)) throw new Error(`${what}: frame ${frameId} no longer exists; ${hint}`);
+}
+
 async function withFrames(tabId, method, params, top) {
-  const frames = (await chrome.webNavigation.getAllFrames({ tabId }).catch(() => [])).filter((f) => f.frameId !== 0);
+  const frames = (await allFrames(tabId)).filter((f) => f.frameId !== 0);
   const subs = [];
   for (const f of frames) {
     try {
@@ -139,7 +147,7 @@ async function handle(method, params) {
       return withFrames(params.tabId, method, params, await inPage(params.tabId, method, params));
     case "find": {
       const top = await inPage(params.tabId, "find", params);
-      const frames = (await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch(() => [])).filter((f) => f.frameId !== 0);
+      const frames = (await allFrames(params.tabId)).filter((f) => f.frameId !== 0);
       const hits = [...top];
       for (const f of frames) {
         if (hits.length >= 20) break;
@@ -156,15 +164,11 @@ async function handle(method, params) {
       const m = /^f(\d+):(ref_\d+)$/.exec(params.ref ?? "");
       if (!m) return inPage(params.tabId, method, params);
       const frameId = Number(m[1]);
-      const frames = await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch(() => []);
-      if (!frames.some((f) => f.frameId === frameId)) throw new Error(`${params.ref}: frame ${frameId} no longer exists; re-run read_page or find`);
+      await requireFrame(params.tabId, frameId, params.ref, "re-run read_page or find");
       return inPage(params.tabId, method, { ...params, ref: m[2] }, frameId);
     }
     case "javascript": {
-      if (params.frameId) {
-        const frames = await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch(() => []);
-        if (!frames.some((f) => f.frameId === params.frameId)) throw new Error(`frame ${params.frameId} no longer exists; re-run read_page`);
-      }
+      if (params.frameId) await requireFrame(params.tabId, params.frameId, "javascript", "re-run read_page");
       return inPage(params.tabId, method, params, params.frameId);
     }
     case "read_console":
