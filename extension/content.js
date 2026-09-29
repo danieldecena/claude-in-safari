@@ -5,8 +5,8 @@
 // (their refs reset, so re-run read_page after an update). No top-level bindings here:
 // executeScript re-runs this file in the same isolated world, and a top-level const
 // would throw a redeclaration SyntaxError on every call after the first.
-if ((window.__cis?.version ?? 0) < 4) {
-  const CIS_VERSION = 4;
+if ((window.__cis?.version ?? 0) < 5) {
+  const CIS_VERSION = 5;
 
   // Console capture (manifest injects this file at document_start so early logs are seen).
   // console.* runs in the page world, so a hook is injected there and relayed via postMessage;
@@ -126,6 +126,7 @@ if ((window.__cis?.version ?? 0) < 4) {
 
   const deref = (ref) => {
     if (!ref) throw new Error("ref is required; get one from read_page or find");
+    if (/^f\d+:/.test(ref)) throw new Error(`${ref} is inside an iframe; iframe content is read-only for now`);
     const el = refs.get(ref)?.deref();
     if (!el?.isConnected) throw new Error(`${ref} not found or no longer in the page; re-run read_page or find`);
     return el;

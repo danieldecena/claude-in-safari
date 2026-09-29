@@ -163,7 +163,7 @@ if (process.argv.includes("--spike")) {
   const tabId = z.number().int().describe("Tab id from tabs_context");
   server.registerTool(
     "get_page_text",
-    { description: "Text content of a tab (article or main element if present, else body).", inputSchema: z.object({ tabId }) },
+    { description: "Text content of a tab (article or main element if present, else body), plus a frames list with the text of any iframes.", inputSchema: z.object({ tabId }) },
     async (p) => text(await onTab("get_page_text", p)),
   );
   server.registerTool(

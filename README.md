@@ -96,7 +96,8 @@ between pings means Safari killed and restarted the background page.
   `performance.getEntriesByType("resource")`: url, initiator, duration and size. No
   method, headers or bodies (Safari has no debugger API), and the status is always `?`
   because Safari 27 does not expose `responseStatus`. Buffer is about the last 250 entries.
-- **Top frame only.** Page tools read the top document, not iframes. A page whose app lives
-  in an iframe (iCloud Mail) returns empty text from `get_page_text`; `screenshot` still works.
+- **Iframes are read-only.** `get_page_text` adds a `frames` list and `read_page` appends a
+  section per iframe (cross-origin too), with refs tagged `f<frameId>:ref_N`. Acting tools
+  (`computer`, `find`, `javascript`) still work on the top frame only and refuse those refs.
 - **Screenshots briefly activate background tabs** (captureVisibleTab only sees the
   active tab); the previously active tab is restored after.

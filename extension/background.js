@@ -41,14 +41,15 @@ function connect() {
 // content.js guards against running twice.
 // A tab that is still loading (right after navigate) returns nothing from executeScript, so
 // retry for a few seconds before giving up. Errors the page's own code raised are not retried.
-async function inPage(tabId, method, params) {
+async function inPage(tabId, method, params, frameId) {
   const code = `window.__cis.run(${JSON.stringify(method)}, ${JSON.stringify(params)})`;
   const deadline = Date.now() + 5000;
   let last = "no result";
   while (Date.now() < deadline) {
     try {
-      await chrome.tabs.executeScript(tabId, { file: "content.js" });
-      const [r] = await chrome.tabs.executeScript(tabId, { code });
+      const at = frameId ? { frameId } : {};
+      await chrome.tabs.executeScript(tabId, { file: "content.js", ...at });
+      const [r] = await chrome.tabs.executeScript(tabId, { code, ...at });
       if (r?.error) throw Object.assign(new Error(r.error), { fromPage: true });
       if (r) return r.result;
       last = "no result";
@@ -59,6 +60,27 @@ async function inPage(tabId, method, params) {
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`tab ${tabId} did not accept the script (still loading or not scriptable): ${last}`);
+}
+
+// Page tools reach the top frame only; the reading tools also visit each subframe so an app
+// living in an iframe (iCloud Mail) is not invisible. Refs are per-frame memory, so subframe
+// refs are tagged f<frameId>: and the acting tools refuse them. A frame that will not take the
+// script (sandboxed, still loading) is skipped: the top-frame answer stands on its own.
+async function withFrames(tabId, method, params, top) {
+  const frames = (await chrome.webNavigation.getAllFrames({ tabId }).catch(() => [])).filter((f) => f.frameId !== 0);
+  const subs = [];
+  for (const f of frames) {
+    try {
+      let r = await inPage(tabId, method, params, f.frameId);
+      if (method === "read_page") r = r.replace(/\[(ref_\d+)\]/g, `[f${f.frameId}:$1]`);
+      subs.push({ frameId: f.frameId, url: f.url, r });
+    } catch {}
+  }
+  if (method === "get_page_text") {
+    const withText = subs.filter((f) => f.r.text?.trim()).map((f) => ({ frameId: f.frameId, url: f.url, text: f.r.text }));
+    return withText.length ? { ...top, frames: withText } : top;
+  }
+  return top + subs.filter((f) => f.r.trim()).map((f) => `\n[frame f${f.frameId} ${f.url}]\n${f.r}`).join("");
 }
 
 async function handle(method, params) {
@@ -114,6 +136,7 @@ async function handle(method, params) {
     }
     case "get_page_text":
     case "read_page":
+      return withFrames(params.tabId, method, params, await inPage(params.tabId, method, params));
     case "find":
     case "computer":
     case "javascript":
