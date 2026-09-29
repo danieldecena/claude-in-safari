@@ -1,4 +1,5 @@
 ## Tasks
+- [ ] Fix iCloud Mail tab refusing scripts
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript
