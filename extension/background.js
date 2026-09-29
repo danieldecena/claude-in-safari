@@ -64,7 +64,7 @@ async function inPage(tabId, method, params, frameId) {
 
 // Page tools reach the top frame only; the reading tools also visit each subframe so an app
 // living in an iframe (iCloud Mail) is not invisible. Refs are per-frame memory, so subframe
-// refs are tagged f<frameId>: and the acting tools refuse them. A frame that will not take the
+// refs are tagged f<frameId>: and computer routes them back to that frame. A frame that will not take the
 // script (sandboxed, still loading) is skipped: the top-frame answer stands on its own.
 async function withFrames(tabId, method, params, top) {
   const frames = (await chrome.webNavigation.getAllFrames({ tabId }).catch(() => [])).filter((f) => f.frameId !== 0);
@@ -137,9 +137,31 @@ async function handle(method, params) {
     case "get_page_text":
     case "read_page":
       return withFrames(params.tabId, method, params, await inPage(params.tabId, method, params));
-    case "find":
-    case "computer":
+    case "find": {
+      const top = await inPage(params.tabId, "find", params);
+      const frames = (await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch(() => [])).filter((f) => f.frameId !== 0);
+      const hits = [...top];
+      for (const f of frames) {
+        if (hits.length >= 20) break;
+        try {
+          const r = await inPage(params.tabId, "find", params, f.frameId);
+          hits.push(...r.map((l) => l.replace(/\[(ref_\d+)\]/, `[f${f.frameId}:$1]`)));
+        } catch {}
+      }
+      return hits.slice(0, 20);
+    }
+    case "computer": {
+      // Refs from subframes arrive as f<frameId>:ref_N; the content script in that frame knows
+      // only the bare ref_N.
+      const m = /^f(\d+):(ref_\d+)$/.exec(params.ref ?? "");
+      if (!m) return inPage(params.tabId, method, params);
+      const frameId = Number(m[1]);
+      const frames = await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch(() => []);
+      if (!frames.some((f) => f.frameId === frameId)) throw new Error(`${params.ref}: frame ${frameId} no longer exists; re-run read_page or find`);
+      return inPage(params.tabId, method, { ...params, ref: m[2] }, frameId);
+    }
     case "javascript":
+      return inPage(params.tabId, method, params, params.frameId);
     case "read_console":
     case "read_network":
       return inPage(params.tabId, method, params);

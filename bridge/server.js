@@ -176,7 +176,7 @@ if (process.argv.includes("--spike")) {
   );
   server.registerTool(
     "find",
-    { description: "Find visible elements in a tab whose role, name or href contains the query; returns up to 20 with refs.", inputSchema: z.object({ tabId, query: z.string() }) },
+    { description: "Find visible elements in a tab (and its iframes) whose role, name or href contains the query; returns up to 20 with refs. Iframe hits carry f<frameId>: refs that computer accepts.", inputSchema: z.object({ tabId, query: z.string() }) },
     async (p) => ({ content: [{ type: "text", text: (await onTab("find", p)).join("\n") || "no matches" }] }),
   );
   server.registerTool(
@@ -196,7 +196,7 @@ if (process.argv.includes("--spike")) {
       inputSchema: z.object({
         tabId,
         action: z.enum(["click", "type", "key", "scroll", "set"]),
-        ref: z.string().optional().describe("ref_N target; required for click and type, optional for key and scroll"),
+        ref: z.string().optional().describe("ref_N target (or f<frameId>:ref_N for an iframe element); required for click and type, optional for key and scroll"),
         text: z.string().optional().describe("type: text to put in the field (replaces its value)"),
         value: z.union([z.string(), z.boolean()]).optional().describe("set: option value or text for a select, true/false for a checkbox or radio, text for other fields"),
         key: z.string().optional().describe("key: key name like Enter, Escape, Tab, ArrowDown, or a single character"),
@@ -210,7 +210,7 @@ if (process.argv.includes("--spike")) {
     "javascript",
     {
       description: "Run JavaScript in a tab and return the last expression's value. Executes in the content-script world: full DOM access, but not the page's own JS variables; synchronous code only.",
-      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned") }),
+      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned"), frameId: z.number().int().optional().describe("run in this iframe (id from the [frame fN] headers of read_page); default is the top frame") }),
     },
     async (p) => text(await onTab("javascript", p)),
   );
