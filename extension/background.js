@@ -19,12 +19,17 @@ function connect() {
     ws.send(JSON.stringify({ type: "hello", startedAt, ua: navigator.userAgent }));
   };
   ws.onmessage = async (ev) => {
-    const { id, method, params } = JSON.parse(ev.data);
+    const sock = ev.target;
+    let id, method, params;
+    try { ({ id, method, params } = JSON.parse(ev.data)); } catch { return; }
+    let reply;
     try {
-      ws.send(JSON.stringify({ id, result: await handle(method, params) }));
+      reply = { id, result: await handle(method, params ?? {}) };
     } catch (e) {
-      ws.send(JSON.stringify({ id, error: String(e?.message ?? e) }));
+      reply = { id, error: String(e?.message ?? e) };
     }
+    // The bridge may have gone while the call ran; send() on a closed socket throws.
+    if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(reply));
   };
   ws.onclose = () => {
     setTimeout(connect, backoff);
@@ -93,9 +98,11 @@ async function handle(method, params) {
         await chrome.tabs.update(params.tabId, { active: true });
         await new Promise((r) => setTimeout(r, 350));
       }
-      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-      if (prev && prev.id !== params.tabId) await chrome.tabs.update(prev.id, { active: true });
-      return { dataUrl };
+      try {
+        return { dataUrl: await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }) };
+      } finally {
+        if (prev && prev.id !== params.tabId) await chrome.tabs.update(prev.id, { active: true }).catch(() => {});
+      }
     }
     case "tab": {
       const { tabId, action } = params;

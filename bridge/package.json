@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "spike": "node server.js --spike"
+    "spike": "node server.js --spike",
+    "test": "node --test ../test/bridge.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.2.0",

@@ -30,6 +30,7 @@ rm -rf "$HOME/Applications/Claude in Safari.app"   # ditto merges into an existi
 ditto "DerivedData/Build/Products/Debug/Claude in Safari.app" \
   "$HOME/Applications/Claude in Safari.app"
 cd bridge && pnpm spike   # connectivity check, no MCP
+cd bridge && pnpm test    # protocol tests against a fake extension (~30s); uses CIS_PORT, not 18765
 ```
 
 Signing: Apple Development cert (free personal team); ad-hoc signing does not work.
