@@ -225,7 +225,7 @@ if (process.argv.includes("--spike")) {
     "javascript",
     {
       description: "Run JavaScript in a tab and return the last expression's value. Executes in the content-script world: full DOM access, but not the page's own JS variables; synchronous code only.",
-      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned"), frameId: z.number().int().optional().describe("run in this iframe (id from the [frame fN] headers of read_page); default is the top frame") }),
+      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned"), frameId: z.number().int().optional().describe("run in this iframe: the N from a [frame fN] header of read_page, e.g. 236223201282 (Safari frame ids are large; pass them whole); default is the top frame") }),
     },
     async (p) => text(await onTab("javascript", p)),
   );

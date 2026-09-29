@@ -88,7 +88,8 @@ async function withFrames(tabId, method, params, top) {
     const withText = subs.filter((f) => f.r.text?.trim()).map((f) => ({ frameId: f.frameId, url: f.url, text: f.r.text }));
     return withText.length ? { ...top, frames: withText } : top;
   }
-  return top + subs.filter((f) => f.r.trim()).map((f) => `\n[frame f${f.frameId} ${f.url}]\n${f.r}`).join("");
+  // Frames with nothing to list still get a header, so javascript can target them by frameId.
+  return top + subs.map((f) => `\n[frame f${f.frameId} ${f.url}]\n${f.r.trim() ? f.r : "(no headings, links or fields)"}`).join("");
 }
 
 async function handle(method, params) {
