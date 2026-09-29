@@ -1,6 +1,7 @@
 // Connects out to the bridge (bridge/server.js). The bridge owns the socket because a
 // Safari service worker cannot listen; it can only dial.
 const PORT = 18765;
+
 const startedAt = Date.now();
 
 let ws;
@@ -11,7 +12,7 @@ function connect() {
   ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   ws.onopen = () => {
     backoff = 1000;
-    ws.send(JSON.stringify({ type: "hello", startedAt }));
+    ws.send(JSON.stringify({ type: "hello", startedAt, ua: navigator.userAgent }));
   };
   ws.onmessage = async (ev) => {
     const { id, method, params } = JSON.parse(ev.data);
