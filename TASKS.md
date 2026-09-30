@@ -1,4 +1,10 @@
 ## Tasks
+- [ ] Safari speed T1: bench page tools, record baseline
+- [ ] Safari speed T2: parallel subframes + ad-frame skip
+- [ ] Safari speed T3: shadow DOM, checkVisibility, 8s budget
+- [ ] Safari speed T4: async javascript (parked promise + poll)
+- [x] Safari speed T5: batch tool in the bridge -- b240952
+- [ ] Safari speed T6: recipes + skill upload copies
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript
@@ -17,7 +23,7 @@
 
 <!-- resume-footer -->
 ---
-Plan approved 2026-09-29 06:38.
+Plan approved 2026-09-29 12:17.
 
 Sessions start in "plan" (permissions.defaultMode in
 ~/.claude/settings.json). Bypass is reachable in the Shift+Tab cycle only
@@ -26,7 +32,7 @@ when launched via `cb` (--allow-dangerously-skip-permissions); `yolo`
 
 Only if Claude Code actually closed:
 
-    claude --resume f75fb6ab-d6e4-482b-9a67-aee1ea9d1881
+    claude --resume de6f14e0-3947-4c06-9f8b-254079c16e12
 
 (`-c` resumes the most recent session; bare `--resume` opens a searchable picker.)
 <!-- /resume-footer -->
