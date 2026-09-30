@@ -10,18 +10,23 @@ const startedAt = Date.now();
 
 let ws;
 let backoff = 1000;
+// Shown by the toolbar popup.
+let connectedAt = null;
+let lastCommand = null;
 
 function connect() {
   if (ws && ws.readyState <= WebSocket.OPEN) return;
   ws = new WebSocket(`ws://127.0.0.1:${PORT}/?token=${CIS_TOKEN}`);
   ws.onopen = () => {
     backoff = 1000;
+    connectedAt = Date.now();
     ws.send(JSON.stringify({ type: "hello", startedAt, ua: navigator.userAgent }));
   };
   ws.onmessage = async (ev) => {
     const sock = ev.target;
     let id, method, params;
     try { ({ id, method, params } = JSON.parse(ev.data)); } catch { return; }
+    lastCommand = { method, at: Date.now() };
     let reply;
     try {
       reply = { id, result: await handle(method, params ?? {}) };
@@ -31,7 +36,9 @@ function connect() {
     // The bridge may have gone while the call ran; send() on a closed socket throws.
     if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(reply));
   };
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
+    // A Reconnect from the popup may already have opened the replacement socket.
+    if (ev.target === ws) connectedAt = null;
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 5000);
   };
@@ -187,6 +194,18 @@ chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
   if (frameId !== 0) return;
   chrome.tabs.executeScript(tabId, { file: "content.js" }).catch(() => {});
 });
+
+// Called by popup.js through getBackgroundPage(): Safari's runtime.onMessage replies are
+// unreliable (see content.js), and top-level functions are properties of this window.
+function popupStatus() {
+  return { connected: ws?.readyState === WebSocket.OPEN, connectedAt, lastCommand, port: PORT };
+}
+
+function popupReconnect() {
+  backoff = 1000;
+  ws?.close();
+  connect();
+}
 
 // Wakes a suspended worker so it can redial; the S1 spike measures whether this is enough.
 chrome.alarms.create("keepalive", { periodInMinutes: 1 });
