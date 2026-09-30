@@ -4,7 +4,7 @@
 //   node server.js --spike  no MCP; pings the extension every 30s to test worker survival
 import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import * as z from "zod/v4";
 import { readFileSync } from "node:fs";
 
@@ -29,21 +29,26 @@ let ext = null;
 let nextId = 1;
 const pending = new Map();
 
+// Other Claude sessions' bridges that joined this one as relays (see joinHub).
+const relays = new Set();
+
 // A web page or another extension can also dial ws://127.0.0.1; require the extension
 // origin scheme plus the shared token, since any Safari extension gets that scheme.
+// Relays dial /relay with the token and no Origin header: browsers always send Origin on a
+// WebSocket, so a page cannot pass as a relay even if it learned the path.
 // A second Claude session starts a second bridge on the same port. Without an error handler the
 // EADDRINUSE error is unhandled and kills the process, so the MCP server never comes up.
-// Stay alive instead, report why calls have no extension, and retry the bind so this bridge
-// takes over once the holder exits.
+// Instead the second bridge joins the holder as a relay, so every session reaches Safari at once.
 let listenError = null;
 function bind() {
   const wss = new WebSocketServer({
     host: "127.0.0.1",
     port: PORT,
     verifyClient: ({ origin, req }) => {
-      const ok = origin?.startsWith("safari-web-extension://")
-        && new URL(req.url, "ws://127.0.0.1").searchParams.get("token") === TOKEN;
-      if (!ok) log("rejected connection from origin", origin);
+      const u = new URL(req.url, "ws://127.0.0.1");
+      const ok = u.searchParams.get("token") === TOKEN
+        && (u.pathname === "/relay" ? !origin : origin?.startsWith("safari-web-extension://"));
+      if (!ok) log("rejected connection from origin", origin, u.pathname);
       return ok;
     },
   });
@@ -53,16 +58,84 @@ function bind() {
   });
   wss.on("error", (e) => {
     const inUse = e.code === "EADDRINUSE";
-    listenError = inUse
-      ? `port ${PORT} is in use, probably by another Claude Code session's bridge; retrying every ${BIND_RETRY_MS / 1000}s`
-      : `bridge socket error: ${e.message}`;
-    log(listenError);
+    listenError = inUse ? null : `bridge socket error: ${e.message}`;
+    if (listenError) log(listenError);
     if (inUse) {
       wss.close();
-      setTimeout(bind, BIND_RETRY_MS);
+      joinHub();
     }
   });
-  wss.on("connection", onConnection);
+  wss.on("connection", (sock, req) => (req.url.startsWith("/relay") ? onRelay(sock) : onConnection(sock, req)));
+}
+
+// Relay side: forward this session's calls to the bridge holding the port. Each extension
+// context the hub reports becomes a stand-in socket in `socks`, so the tools run unchanged.
+// When the hub goes away, rebind: one relay wins the port and the rest join it.
+function joinHub() {
+  const hub = new WebSocket(`ws://127.0.0.1:${PORT}/relay?token=${TOKEN}`);
+  let joined = false;
+  hub.on("open", () => {
+    joined = true;
+    log(`port ${PORT} is held by another session's bridge; relaying through it`);
+  });
+  hub.on("message", (data) => {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return log("dropped malformed message from hub"); }
+    if (msg.type !== "contexts") return settle(msg);
+    socks.clear();
+    for (const c of msg.contexts) {
+      socks.set(c.origin, {
+        ua: c.ua,
+        OPEN: WebSocket.OPEN,
+        get readyState() { return hub.readyState; },
+        send: (d) => hub.send(JSON.stringify({ ...JSON.parse(d), origin: c.origin })),
+      });
+    }
+    ext = [...socks.values()].at(-1) ?? null;
+  });
+  hub.on("error", (e) => {
+    if (joined) return log("hub socket error:", e.message);
+    listenError = `port ${PORT} is in use by something that refused to relay (${e.message}); an older bridge or another app. Retrying every ${BIND_RETRY_MS / 1000}s`;
+    log(listenError);
+  });
+  hub.on("close", () => {
+    for (const [id, p] of pending) {
+      pending.delete(id);
+      clearTimeout(p.timer);
+      p.reject(new Error("the bridge this session relays through exited mid-call; retry"));
+    }
+    socks.clear();
+    ext = null;
+    if (joined) log("hub went away; rebinding");
+    // Jitter so relays freed by the same exit do not all hit the port in the same tick.
+    setTimeout(bind, joined ? 100 + Math.random() * 400 : BIND_RETRY_MS);
+  });
+}
+
+// Hub side: run a relay's call against the named extension context and send the answer back.
+const contextsMsg = () => JSON.stringify({ type: "contexts", contexts: [...socks].map(([origin, s]) => ({ origin, ua: s.ua })) });
+const broadcastContexts = () => { for (const r of relays) r.send(contextsMsg()); };
+function onRelay(sock) {
+  log("relay joined");
+  relays.add(sock);
+  sock.send(contextsMsg());
+  sock.on("message", (data) => {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return log("dropped malformed message from relay"); }
+    call(msg.method, msg.params, socks.get(msg.origin) ?? null).then(
+      (result) => sock.send(JSON.stringify({ id: msg.id, result })),
+      (e) => sock.send(JSON.stringify({ id: msg.id, error: e.message })),
+    );
+  });
+  sock.on("close", () => { relays.delete(sock); log("relay left"); });
+}
+
+function settle(msg) {
+  const p = pending.get(msg.id);
+  if (!p) return;
+  pending.delete(msg.id);
+  clearTimeout(p.timer);
+  msg.error ? p.reject(new Error(msg.error)) : p.resolve(msg.result);
 }
 
 function onConnection(sock, req) {
@@ -76,13 +149,10 @@ function onConnection(sock, req) {
     try { msg = JSON.parse(data); } catch { return log("dropped malformed message from", origin); }
     if (msg.type === "hello") {
       sock.ua = msg.ua;
+      broadcastContexts();
       return log("hello", origin, "startedAt", new Date(msg.startedAt).toISOString(), msg.ua);
     }
-    const p = pending.get(msg.id);
-    if (!p) return;
-    pending.delete(msg.id);
-    clearTimeout(p.timer);
-    msg.error ? p.reject(new Error(msg.error)) : p.resolve(msg.result);
+    settle(msg);
   });
   sock.on("close", () => {
     log("extension disconnected", origin);
@@ -94,7 +164,9 @@ function onConnection(sock, req) {
     }
     if (socks.get(origin) === sock) socks.delete(origin);
     if (ext === sock) ext = [...socks.values()].at(-1) ?? null;
+    broadcastContexts();
   });
+  broadcastContexts();
 }
 
 bind();
@@ -124,6 +196,13 @@ if (process.argv.includes("--spike")) {
   }, 30000);
 } else {
   const server = new McpServer({ name: "claude-in-safari", version: "0.1.0" });
+  // Batchable tools are registered through `tool` so batch can call their handlers directly,
+  // with the same schema parsing (and defaults) as a direct call.
+  const handlers = {};
+  const tool = (name, def, fn) => {
+    handlers[name] = (args) => fn(def.inputSchema.parse(args));
+    server.registerTool(name, def, fn);
+  };
   // Every browser and profile loads its own extension context, and a context only sees its
   // own profile's windows. Contexts with no tabs (STP 27.0 exposes none) are left out.
   const settled = async () => {
@@ -146,12 +225,13 @@ if (process.argv.includes("--spike")) {
     return keepEmpty ? all : all.filter((c) => c.tabs.length);
   };
   const text = (v) => ({ content: [{ type: "text", text: JSON.stringify(v, null, 1) }] });
+  const text_ = (s) => ({ content: [{ type: "text", text: s }] });
   server.registerTool(
     "tabs_context",
     { description: "List open Safari tabs, grouped by extension context (one per Safari profile). A context with no tabs is listed with an empty tabs array; one that failed to answer carries an error.", inputSchema: z.object({}) },
     async () => text((await contexts(true)).map(({ sock, ...c }) => c)),
   );
-  server.registerTool(
+  tool(
     "navigate",
     {
       description: "Open a URL in a new background tab, or load it into an existing tab when tabId is given.",
@@ -176,12 +256,12 @@ if (process.argv.includes("--spike")) {
     return call(method, params, c.sock);
   };
   const tabId = z.number().int().describe("Tab id from tabs_context");
-  server.registerTool(
+  tool(
     "get_page_text",
     { description: "Text content of a tab (article or main element if present, else body), plus a frames list with the text of any iframes.", inputSchema: z.object({ tabId }) },
     async (p) => text(await onTab("get_page_text", p)),
   );
-  server.registerTool(
+  tool(
     "read_page",
     {
       description: "Accessibility-style tree of a tab with ref_N ids for elements.",
@@ -189,7 +269,7 @@ if (process.argv.includes("--spike")) {
     },
     async (p) => ({ content: [{ type: "text", text: await onTab("read_page", p) }] }),
   );
-  server.registerTool(
+  tool(
     "find",
     { description: "Find visible elements in a tab (and its iframes) whose role, name or href contains the query; returns up to 20 with refs. Iframe hits carry f<frameId>: refs that computer accepts.", inputSchema: z.object({ tabId, query: z.string() }) },
     async (p) => ({ content: [{ type: "text", text: (await onTab("find", p)).join("\n") || "no matches" }] }),
@@ -204,7 +284,7 @@ if (process.argv.includes("--spike")) {
       return { content: [{ type: "image", mimeType: m[1], data: m[2] }] };
     },
   );
-  server.registerTool(
+  tool(
     "computer",
     {
       description: "Interact with a tab: click an element, type into a field, press a key, or scroll. Element refs come from read_page or find.",
@@ -221,7 +301,7 @@ if (process.argv.includes("--spike")) {
     },
     async (p) => text(await onTab("computer", p)),
   );
-  server.registerTool(
+  tool(
     "javascript",
     {
       description: "Run JavaScript in a tab and return the last expression's value. Executes in the content-script world: full DOM access, but not the page's own JS variables; synchronous code only.",
@@ -245,7 +325,7 @@ if (process.argv.includes("--spike")) {
     },
     async (p) => ({ content: [{ type: "text", text: (await onTab("read_network", p)).join("\n") || "no resources recorded" }] }),
   );
-  server.registerTool(
+  tool(
     "tab",
     {
       description: "Close, reload, or move back/forward in a tab's history.",
@@ -264,6 +344,41 @@ if (process.argv.includes("--spike")) {
         ...(await call("ping", {}, sock).catch((e) => ({ error: e.message }))),
       })));
       return text(rows);
+    },
+  );
+  const BATCHABLE = ["computer", "javascript", "find", "get_page_text", "read_page", "navigate", "tab"];
+  server.registerTool(
+    "batch",
+    {
+      description: "Run up to 30 tool steps on one tab in order, in one call. Each step is {tool, args}; tabId is inherited. tool: computer, javascript, find, get_page_text, read_page, navigate, tab, or wait ({ms}, max 5000). Stops at the first failing step unless stopOnError is false. Screenshots are not allowed in a batch.",
+      inputSchema: z.object({
+        tabId,
+        steps: z.array(z.object({ tool: z.enum([...BATCHABLE, "wait"]), args: z.record(z.string(), z.any()).optional() })).min(1).max(30),
+        stopOnError: z.boolean().optional(),
+      }),
+    },
+    async ({ tabId, steps, stopOnError = true }) => {
+      const out = [];
+      for (const [i, s] of steps.entries()) {
+        const n = i + 1;
+        try {
+          if (s.tool === "wait") {
+            const ms = Math.min(Math.max(Number(s.args?.ms ?? 0), 0), 5000);
+            await new Promise((r) => setTimeout(r, ms));
+            out.push(`${n}. wait ${ms}ms`);
+            continue;
+          }
+          const r = await handlers[s.tool]({ ...s.args, tabId: s.args?.tabId ?? tabId });
+          out.push(`${n}. ${s.tool}: ${r.content.map((c) => c.text ?? `[${c.type}]`).join("\n")}`);
+        } catch (e) {
+          out.push(`${n}. ${s.tool} failed: ${e.message}`);
+          if (stopOnError) {
+            out.push(`stopped at step ${n} of ${steps.length}`);
+            break;
+          }
+        }
+      }
+      return text_(out.join("\n"));
     },
   );
   await server.connect(new StdioServerTransport());

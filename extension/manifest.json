@@ -21,6 +21,25 @@
     "webNavigation",
     "<all_urls>"
   ],
+  "browser_action": {
+    "default_title": "Claude in Safari",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/toolbar-16.png",
+      "18": "images/toolbar-18.png",
+      "19": "images/toolbar-19.png",
+      "20": "images/toolbar-20.png",
+      "24": "images/toolbar-24.png",
+      "32": "images/toolbar-32.png",
+      "36": "images/toolbar-36.png",
+      "38": "images/toolbar-38.png",
+      "40": "images/toolbar-40.png",
+      "48": "images/toolbar-48.png",
+      "64": "images/toolbar-64.png",
+      "96": "images/toolbar-96.png",
+      "128": "images/toolbar-128.png"
+    }
+  },
   "background": {
     "scripts": [
       "background.js"
