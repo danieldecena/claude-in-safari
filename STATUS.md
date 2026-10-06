@@ -12,7 +12,7 @@
 - A Safari-restored iCloud Mail tab refuses scripts ("Could not execute script in tab"), even after a reload; a Mail tab opened via `navigate` works, as do restored LinkedIn tabs. Cause unknown.
 
 ## Next Up
-- Live check of the relay hub: two Claude sessions, `ping` + `tabs_context` from each, then quit the first and confirm the second still works. Needs the new bridge in both sessions (restart them).
+- Rest of the relay hub check: quit the holder session and confirm the relay rebinds. Half done 2026-10-06: a relay session (pid 6781) reached Safari through another session's holder (pid 83954) with `ping`, `tabs_context`, `navigate`, `read_page` and `tab` close all answering. That holder runs from the old `~/developer/claude-in-safari/` path, now deleted, so restart that session to pick up the moved folder.
 
 ## Decision log
 ### 2026-09-29
