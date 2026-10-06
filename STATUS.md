@@ -6,15 +6,23 @@
 - read_page shows `autocomplete` / `passwordrules`; password values show length only.
 - Private remote: github.com/danieldecena/claude-in-safari.
 - Installed app is Developer ID signed and notarized (spctl: "Notarized Developer ID"); extension loads in Safari 27.2 and STP, and survives a Safari restart with "Allow unsigned extensions" off.
+- Relay hub, live 2026-10-06: a second session reached Safari through the holder; killing the holder made that relay take port 18765 and `ping` answered from both browsers.
 - Toolbar popup shows "Connected to bridge" and Reconnect reconnects (user-observed; Safari on Sidecar cannot be screen-captured).
 
 ## Known broken
 - A Safari-restored iCloud Mail tab refuses scripts ("Could not execute script in tab"), even after a reload; a Mail tab opened via `navigate` works, as do restored LinkedIn tabs. Cause unknown.
 
 ## Next Up
-- Rest of the relay hub check: quit the holder session and confirm the relay rebinds. Half done 2026-10-06: a relay session (pid 6781) reached Safari through another session's holder (pid 83954) with `ping`, `tabs_context`, `navigate`, `read_page` and `tab` close all answering. That holder runs from the old `~/developer/claude-in-safari/` path, now deleted, so restart that session to pick up the moved folder.
+- Fix the iCloud Mail tab that refuses scripts (first open item in `TASKS.md`; Known broken above).
+- Rest of `TASKS.md`: the Safari speed tasks T1-T4 and T6.
 
 ## Decision log
+### 2026-10-06
+- Decided: Claude in Safari is off in Private Browsing in Safari (Settings > Extensions), so Claude cannot read private windows. STP was already off.
+- Finding: STP showing `tabs: []` in `tabs_context` meant STP had no open window (AppleScript `count of windows` was 0), not a broken extension; the bridge also leaves empty contexts out of `navigate`'s default pick, so `navigate` needs a window in at least one browser.
+- Finding: a bridge holder started from the pre-move `~/developer/claude-in-safari/` path kept running after the folder moved; killing it handed the port to a relay with no tool loss.
+- Decided: removed 7 tombstone entries (`RemovedDate` set) from Safari's `WebExtensions/Extensions.plist` and STP's `AppExtensions/Extensions.plist` with both browsers quit; backups in `~/Archive/safari-extension-plists-2026-10-06/`.
+
 ### 2026-09-29
 - Decided: second sessions share the bridge as relays instead of retrying the bind. The old retry left a new session with no Safari until the holder exited, and taking over the port meant killing another session's bridge. The relay path needs the token and no Origin header, so a web page can't use it. An older holder rejects relays, and the new bridge falls back to retrying.
 - Decided: keep this project rather than switch to Safari 27's `safaridriver --mcp`. It runs an isolated automation session: `list_tabs` saw none of the user's tabs, iCloud Mail loaded signed out, and `evaluate_javascript` with `frameId` failed on a plain `<iframe src="inner.html">` ("Could not determine iframe src URL"). It is fine for clean-room testing; it cannot act in the logged-in browser.
