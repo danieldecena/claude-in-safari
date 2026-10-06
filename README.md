@@ -89,7 +89,7 @@ between pings means Safari killed and restarted the background page.
 - **Clicks are untrusted.** Safari has no equivalent of Chrome's `debugger`
   permission, so `computer` dispatches synthetic DOM events (`isTrusted: false`).
   Sites that ignore untrusted input need the osascript fallback in
-  `~/developer/safari-automation`.
+  `~/developer/safari/safari-automation`.
 - **Console capture is per-tab since injection** and pages with a strict CSP only
   capture window errors, not `console.*` calls.
 - **Network capture is timing entries only.** `read_network` reads
