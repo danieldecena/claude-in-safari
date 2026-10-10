@@ -48,11 +48,11 @@ function connect() {
 // content.js guards against running twice.
 // A tab that is still loading (right after navigate) returns nothing from executeScript, so
 // retry for a few seconds before giving up. Errors the page's own code raised are not retried.
-async function inPage(tabId, method, params, frameId) {
+async function inPage(tabId, method, params, frameId, { retryMs = 5000 } = {}) {
   const code = `window.__cis.run(${JSON.stringify(method)}, ${JSON.stringify(params)})`;
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + retryMs;
   let last = "no result";
-  while (Date.now() < deadline) {
+  for (;;) {
     try {
       const at = frameId ? { frameId } : {};
       await chrome.tabs.executeScript(tabId, { file: "content.js", ...at });
@@ -64,6 +64,7 @@ async function inPage(tabId, method, params, frameId) {
       if (e.fromPage) throw e;
       last = String(e?.message ?? e);
     }
+    if (Date.now() + 250 >= deadline) break;
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`tab ${tabId} did not accept the script (still loading or not scriptable): ${last}`);
@@ -81,16 +82,21 @@ async function requireFrame(tabId, frameId, what, hint) {
   if (!(await allFrames(tabId)).some((f) => f.frameId === frameId)) throw new Error(`${what}: frame ${frameId} no longer exists; ${hint}`);
 }
 
+// Ad and tracker frames never hold anything the tools need, and each one that refuses the
+// script used to cost a full retry budget.
+const SKIP_FRAME = /doubleclick\.net|googlesyndication\.com|googletagmanager\.com|recaptcha\/api2\/(anchor|bframe)/;
+const subframes = async (tabId) => (await allFrames(tabId)).filter((f) => f.frameId !== 0 && !SKIP_FRAME.test(f.url ?? ""));
+
 async function withFrames(tabId, method, params, top) {
-  const frames = (await allFrames(tabId)).filter((f) => f.frameId !== 0);
-  const subs = [];
-  for (const f of frames) {
+  const subs = (await Promise.all((await subframes(tabId)).map(async (f) => {
     try {
-      let r = await inPage(tabId, method, params, f.frameId);
+      let r = await inPage(tabId, method, params, f.frameId, { retryMs: 0 });
       if (method === "read_page") r = r.replace(/\[(ref_\d+)\]/g, `[f${f.frameId}:$1]`);
-      subs.push({ frameId: f.frameId, url: f.url, r });
-    } catch {}
-  }
+      return { frameId: f.frameId, url: f.url, r };
+    } catch {
+      return null;
+    }
+  }))).filter(Boolean);
   if (method === "get_page_text") {
     const withText = subs.filter((f) => f.r.text?.trim()).map((f) => ({ frameId: f.frameId, url: f.url, text: f.r.text }));
     return withText.length ? { ...top, frames: withText } : top;
@@ -155,16 +161,10 @@ async function handle(method, params) {
       return withFrames(params.tabId, method, params, await inPage(params.tabId, method, params));
     case "find": {
       const top = await inPage(params.tabId, "find", params);
-      const frames = (await allFrames(params.tabId)).filter((f) => f.frameId !== 0);
-      const hits = [...top];
-      for (const f of frames) {
-        if (hits.length >= 20) break;
-        try {
-          const r = await inPage(params.tabId, "find", params, f.frameId);
-          hits.push(...r.map((l) => l.replace(/\[(ref_\d+)\]/, `[f${f.frameId}:$1]`)));
-        } catch {}
-      }
-      return hits.slice(0, 20);
+      const per = await Promise.all((await subframes(params.tabId)).map((f) =>
+        inPage(params.tabId, "find", params, f.frameId, { retryMs: 0 })
+          .then((r) => r.map((l) => l.replace(/\[(ref_\d+)\]/, `[f${f.frameId}:$1]`)), () => [])));
+      return [...top, ...per.flat()].slice(0, 20);
     }
     case "computer": {
       // Refs from subframes arrive as f<frameId>:ref_N; the content script in that frame knows

@@ -17,6 +17,12 @@
 - Rest of `TASKS.md`: the Safari speed tasks T1-T4 and T6.
 
 ## Decision log
+### 2026-10-10
+- Finding: bench baseline before speed fixes (`bridge/bench.js`, 7s settle). The plan's LinkedIn and Workday URLs no longer time out (every probe under 100 ms, in Safari 27.2), so they cannot judge the fixes. Pages with ad iframes do: on w3schools.com/html/html_iframe.asp (8 iframes), speedtest.net (10) and weather.com (34), `find`, `read_page` and `get_page_text` all failed with "timed out" at 15000 ms, in both Safari 27.2 and STP. Run with no settle time, the bench reads pages before they render (Workday `read_page` returned 2 bytes).
+- Finding: after parallel subframes + ad-frame skip (STP, same pages): w3schools 10-21 ms, speedtest 30-36 ms, weather.com 515-640 ms, all `ok`; example.com unchanged (3-8 ms).
+- Decided: the bench takes `BENCH_UA` (pick a browser by user agent) and `BENCH_SETTLE_MS`, and gives up on a relay call after 25 s; a lost reply used to hang it.
+- Finding: an unsigned-team Debug build (`xcodebuild` with no signing flags) is ad-hoc signed and must not be installed; pass `DEVELOPMENT_TEAM=877MLS29T9 CODE_SIGN_IDENTITY="Apple Development" -allowProvisioningUpdates`.
+
 ### 2026-10-06
 - Decided: Claude in Safari is off in Private Browsing in Safari (Settings > Extensions), so Claude cannot read private windows. STP was already off.
 - Finding: STP showing `tabs: []` in `tabs_context` meant STP had no open window (AppleScript `count of windows` was 0), not a broken extension; the bridge also leaves empty contexts out of `navigate`'s default pick, so `navigate` needs a window in at least one browser.

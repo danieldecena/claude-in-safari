@@ -1,7 +1,7 @@
 ## Tasks
 - [ ] Fix iCloud Mail tab refusing scripts
-- [ ] Safari speed T1: bench page tools, record baseline
-- [ ] Safari speed T2: parallel subframes + ad-frame skip
+- [x] Safari speed T1: bench page tools, record baseline
+- [x] Safari speed T2: parallel subframes + ad-frame skip
 - [ ] Safari speed T3: shadow DOM, checkVisibility, 8s budget
 - [ ] Safari speed T4: async javascript (parked promise + poll)
 - [x] Safari speed T5: batch tool in the bridge -- b240952
