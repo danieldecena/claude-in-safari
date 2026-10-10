@@ -14,13 +14,17 @@
 
 ## Next Up
 - Fix the iCloud Mail tab that refuses scripts (first open item in `TASKS.md`; Known broken above).
-- Rest of `TASKS.md`: the Safari speed tasks T1-T4 and T6.
+- Rest of `TASKS.md`: Safari speed T4 (async javascript) and T6 (recipes). T1-T3 are done; stable Safari loads them on its next restart.
 
 ## Decision log
 ### 2026-10-10
 - Finding: bench baseline before speed fixes (`bridge/bench.js`, 7s settle). The plan's LinkedIn and Workday URLs no longer time out (every probe under 100 ms, in Safari 27.2), so they cannot judge the fixes. Pages with ad iframes do: on w3schools.com/html/html_iframe.asp (8 iframes), speedtest.net (10) and weather.com (34), `find`, `read_page` and `get_page_text` all failed with "timed out" at 15000 ms, in both Safari 27.2 and STP. Run with no settle time, the bench reads pages before they render (Workday `read_page` returned 2 bytes).
 - Finding: after parallel subframes + ad-frame skip (STP, same pages): w3schools 10-21 ms, speedtest 30-36 ms, weather.com 515-640 ms, all `ok`; example.com unchanged (3-8 ms).
 - Decided: the bench takes `BENCH_UA` (pick a browser by user agent) and `BENCH_SETTLE_MS`, and gives up on a relay call after 25 s; a lost reply used to hang it.
+- Finding: after shadow roots + 8 s budget (content.js v9, STP, notarized build): `find` and `read_page` list a button and a field inside an open shadow root on a test page (they returned nothing from it before); timings unchanged (w3schools 16-25 ms, speedtest 22-24 ms, weather.com 220-260 ms). Not checked against LinkedIn's Easy Apply modal: that needs a signed-in session and a click on a live job.
+- Decided: kept the old `visible` instead of `checkVisibility`. Over every element on weather.com (2199), w3schools (2926) and speedtest (926) one full pass cost about 1 ms either way, and `checkVisibility` also counts zero-size elements as visible (up to 52 more per page), so it changed output for no speed gain.
+- Finding: the first page-tool call after relaunching STP can still time out once (`javascript` 15 s, then `find` 5.4 s on the same tab); the next calls and a re-run were normal. Not investigated.
+- Decided: `scripts/build-notarized.sh` holds the Developer ID + notarize recipe that was only prose above; it produced the installed build (notarytool "Accepted", spctl "Notarized Developer ID").
 - Finding: an unsigned-team Debug build (`xcodebuild` with no signing flags) is ad-hoc signed and must not be installed; pass `DEVELOPMENT_TEAM=877MLS29T9 CODE_SIGN_IDENTITY="Apple Development" -allowProvisioningUpdates`.
 
 ### 2026-10-06

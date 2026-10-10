@@ -5,8 +5,8 @@
 // (their refs reset, so re-run read_page after an update). No top-level bindings here:
 // executeScript re-runs this file in the same isolated world, and a top-level const
 // would throw a redeclaration SyntaxError on every call after the first.
-if ((window.__cis?.version ?? 0) < 8) {
-  const CIS_VERSION = 8;
+if ((window.__cis?.version ?? 0) < 9) {
+  const CIS_VERSION = 9;
 
   // Console capture (manifest injects this file at document_start so early logs are seen).
   // console.* runs in the page world, so a hook is injected there and relayed via postMessage;
@@ -81,6 +81,10 @@ if ((window.__cis?.version ?? 0) < 8) {
     return s.visibility !== "hidden" && s.display !== "none";
   };
 
+  const BUDGET_MS = 8000;
+  // Open shadow roots render as part of the page (LinkedIn's Easy Apply modal lives in one).
+  const kids = (el) => (el.shadowRoot ? [...el.shadowRoot.children, ...el.children] : el.children);
+
   const describe = (el, role) => {
     let line = role;
     const name = nameOf(el);
@@ -99,14 +103,18 @@ if ((window.__cis?.version ?? 0) < 8) {
 
   const readPage = ({ filter = "all", maxChars = 50000 } = {}) => {
     const lines = [];
+    const deadline = Date.now() + BUDGET_MS;
+    let partial = false;
     const walk = (el, depth) => {
-      if (!(el instanceof Element) || !visible(el)) return;
+      if (partial || !(el instanceof Element) || !visible(el)) return;
+      if (Date.now() > deadline) { partial = true; return; }
       const role = roleOf(el);
       const keep = role && (filter !== "interactive" || INTERACTIVE.has(role));
       if (keep) lines.push(`${"  ".repeat(depth)}${describe(el, role)}`);
-      for (const c of el.children) walk(c, keep ? depth + 1 : depth);
+      for (const c of kids(el)) walk(c, keep ? depth + 1 : depth);
     };
     walk(document.body, 0);
+    if (partial) lines.push("(partial: time budget hit)");
     const out = lines.join("\n");
     return out.length > maxChars ? `${out.slice(0, maxChars)}\n[truncated at ${maxChars} chars]` : out;
   };
@@ -114,13 +122,18 @@ if ((window.__cis?.version ?? 0) < 8) {
   const find = ({ query }) => {
     const q = query.toLowerCase();
     const hits = [];
-    for (const el of document.querySelectorAll("*")) {
+    const deadline = Date.now() + BUDGET_MS;
+    const walk = (el) => {
+      if (hits.length >= 20 || !(el instanceof Element)) return;
+      if (Date.now() > deadline) { if (hits.at(-1) !== "(partial: time budget hit)") hits.push("(partial: time budget hit)"); return; }
       const role = roleOf(el);
-      if (!role || !visible(el)) continue;
-      const hay = `${role} ${nameOf(el)} ${el.getAttribute("href") ?? ""}`.toLowerCase();
-      if (hay.includes(q)) hits.push(describe(el, role));
-      if (hits.length === 20) break;
-    }
+      if (role && visible(el)) {
+        const hay = `${role} ${nameOf(el)} ${el.getAttribute("href") ?? ""}`.toLowerCase();
+        if (hay.includes(q)) hits.push(describe(el, role));
+      }
+      for (const c of kids(el)) walk(c);
+    };
+    walk(document.body);
     return hits;
   };
 
