@@ -12,7 +12,24 @@ let ws;
 let backoff = 1000;
 // Shown by the toolbar popup.
 let connectedAt = null;
-let lastCommand = null;
+// The last few commands, newest first; the tab title is filled in as soon as Safari answers.
+const recent = [];
+// What the bridge reports about itself ({sessions, bootedAt}); null until it says, or when gone.
+let bridgeStatus = null;
+// CIS_VERSION of the bundled content.js, so the popup shows which build Safari actually loaded.
+let contentVersion = null;
+fetch(chrome.runtime.getURL("content.js")).then((r) => r.text())
+  .then((t) => { contentVersion = Number(t.match(/CIS_VERSION = (\d+)/)?.[1]) || null; })
+  .catch(() => {});
+
+function remember(method, params) {
+  const entry = { method, at: Date.now(), tabId: params?.tabId ?? null, title: null };
+  if (method === "computer" && params?.action) entry.method = `computer ${params.action}`;
+  if (method === "tab" && params?.action) entry.method = `tab ${params.action}`;
+  recent.unshift(entry);
+  recent.splice(5);
+  if (entry.tabId != null) chrome.tabs.get(entry.tabId).then((t) => { entry.title = t.title || t.url; }).catch(() => {});
+}
 
 function connect() {
   if (ws && ws.readyState <= WebSocket.OPEN) return;
@@ -24,9 +41,12 @@ function connect() {
   };
   ws.onmessage = async (ev) => {
     const sock = ev.target;
-    let id, method, params;
-    try { ({ id, method, params } = JSON.parse(ev.data)); } catch { return; }
-    lastCommand = { method, at: Date.now() };
+    let id, method, params, type, sessions, bootedAt;
+    try { ({ id, method, params, type, sessions, bootedAt } = JSON.parse(ev.data)); } catch { return; }
+    // The bridge announces itself (and every relay join or leave) with a status message.
+    if (type === "status") { bridgeStatus = { sessions, bootedAt }; return; }
+    if (!method) return;
+    remember(method, params);
     let reply;
     try {
       reply = { id, result: await handle(method, params ?? {}) };
@@ -120,6 +140,13 @@ async function pollJs(tabId, id, frameId) {
 
 async function handle(method, params) {
   switch (method) {
+    case "debug_tab": {
+      const out = {};
+      out.tab = await chrome.tabs.get(params.tabId).catch((e) => `ERR ${e?.message ?? e}`);
+      out.frames = await chrome.webNavigation.getAllFrames({ tabId: params.tabId }).catch((e) => `ERR ${e?.message ?? e}`);
+      out.exec = await chrome.tabs.executeScript(params.tabId, { code: "document.readyState" }).catch((e) => `ERR ${e?.message ?? e}`);
+      return out;
+    }
     case "ping":
       // uptimeMs resetting between pings means Safari killed and restarted the worker.
       return { pong: true, startedAt, uptimeMs: Date.now() - startedAt };

@@ -145,6 +145,7 @@ test("a port held by something that is not a bridge is reported, and the MCP ser
 // every method name received is recorded in order.
 const scripted = (ws, seen) => ws.on("message", (d) => {
   const m = JSON.parse(d);
+  if (!m.method) return; // status broadcasts are not calls
   seen.push(m.method === "computer" ? `computer:${m.params.ref}` : m.method);
   if (m.method === "tabs_context") return ws.send(JSON.stringify({ id: m.id, result: [{ tabId: 7, windowId: 1, url: "https://x.test/", title: "x", active: true }] }));
   if (m.method === "computer") return ws.send(JSON.stringify({ id: m.id, result: { clicked: m.params.ref } }));
@@ -169,6 +170,24 @@ test("batch runs steps in order and stops at the first failure", { timeout: 3000
   assert.deepEqual(seen.filter((s) => s !== "tabs_context"), ["computer:ref_1", "javascript"]);
   assert.equal(seen.filter((s) => s === "tabs_context").length, 1, "a batch looks the tab's context up once, not once per step");
   ws.close(); b.stop();
+});
+
+test("the extension gets a status message on connect and when a relay joins or leaves", { timeout: 30000 }, async () => {
+  const port = nextPort++, first = startBridge(port);
+  await first.ready; await new Promise((r) => setTimeout(r, 500));
+  const ws = await dial(port), statuses = [];
+  ws.on("message", (d) => { const m = JSON.parse(d); if (m.type === "status") statuses.push(m); });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(statuses.length, 1, "one status on connect");
+  assert.equal(statuses[0].sessions, 1);
+  assert.equal(typeof statuses[0].bootedAt, "number");
+  const second = startBridge(port);
+  await second.ready; await new Promise((r) => setTimeout(r, 500));
+  assert.match(second.stderr(), /relaying through it/, "precondition: second must be a relay");
+  assert.equal(statuses.at(-1).sessions, 2, "relay join raises the session count");
+  second.stop(); await new Promise((r) => setTimeout(r, 500));
+  assert.equal(statuses.at(-1).sessions, 1, "relay leave lowers it again");
+  ws.close(); first.stop();
 });
 
 test("batch reports a schema failure on one line and treats a non-numeric wait as 0", { timeout: 30000 }, async () => {

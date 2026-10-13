@@ -4,19 +4,33 @@
 <meta charset="utf-8">
 <style>
   :root { color-scheme: light dark; }
-  body { font: 13px -apple-system, sans-serif; margin: 12px; width: 220px; }
-  #state { display: flex; gap: 6px; align-items: center; font-weight: 600; }
-  #dot { width: 8px; height: 8px; border-radius: 50%; background: gray; }
+  body { font: 13px -apple-system, sans-serif; margin: 0; padding: 12px 14px; width: 260px; }
+  #state { display: flex; gap: 7px; align-items: center; font-weight: 600; font-size: 14px; }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: gray; flex: none; }
   #dot.on { background: #34c759; }
   #dot.off { background: #ff9f0a; }
-  #detail { margin-top: 6px; opacity: 0.75; overflow-wrap: anywhere; }
+  #summary { margin-top: 4px; opacity: 0.7; overflow-wrap: anywhere; }
+  section { border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); margin-top: 10px; padding-top: 8px; }
+  h2 { font: 600 11px -apple-system, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; margin: 0 0 6px; }
+  #recent { display: grid; grid-template-columns: auto 1fr auto; column-gap: 10px; row-gap: 4px; align-items: baseline; }
+  #recent .method { font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+  #recent .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.75; }
+  #recent .when { opacity: 0.55; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #recent .empty { grid-column: 1 / -1; opacity: 0.55; }
+  #footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 11px; opacity: 0.55; font-variant-numeric: tabular-nums; }
   button { width: 100%; padding: 6px; margin-top: 10px; font: inherit; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
   <div id="state"><span id="dot"></span><span id="label">Checking...</span></div>
-  <div id="detail"></div>
-  <button id="reconnect">Reconnect</button>
+  <div id="summary"></div>
+  <section id="recentSection" hidden>
+    <h2>Recent</h2>
+    <div id="recent"></div>
+  </section>
+  <button id="reconnect" hidden>Reconnect</button>
+  <div id="footer"><span id="version"></span><span id="content"></span></div>
   <script src="popup.js"></script>
 </body>
 </html>
