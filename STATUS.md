@@ -13,10 +13,19 @@
 - A Safari-restored iCloud Mail tab refuses scripts ("Could not execute script in tab"), even after a reload; a Mail tab opened via `navigate` works, as do restored LinkedIn tabs. Cause unknown.
 
 ## Next Up
-- Fix the iCloud Mail tab that refuses scripts (first open item in `TASKS.md`; Known broken above).
-- Rest of `TASKS.md`: Safari speed T4 (async javascript) and T6 (recipes). T1-T3 are done; stable Safari loads them on its next restart.
+- Daniel: quit and reopen Safari (and STP) so the installed build with content.js v10 and the redrawn toolbar icon loads; `/mcp` reconnect claude-in-safari for the new `javascript` description and the batch fixes; then `ping` shows a fresh `startedAt`.
+- Live checks for T4: `cd bridge && BENCH_SETTLE_MS=7000 node bench.js https://example.com` should show `javascript async` ok at ~300-500 ms; `javascript` with `await new Promise(() => {}); return 1` should fail at ~12 s with "async code still running", not the bridge's 15 s timeout.
+- T6 acceptance: upload `docs/skill-uploads/*/SKILL.md` to claude.ai (Settings > Capabilities > Skills) and fill one Workday Application Questions page with the `batch` recipe; record the call count here.
+- Fix the iCloud Mail tab that refuses scripts (Known broken above). An uncommitted `debug_tab` probe in `extension/background.js` is stashed for it (`git stash list`).
 
 ## Decision log
+### 2026-10-13
+- Decided: `javascript` accepts `await` (content.js v10). Code that fails to parse because of a top-level `await` is re-run as an async function; the promise is parked in the page and background polls `window.__cis.poll(id)` every 100 ms for up to 12 s. The eval wrapping was checked in Node (sync, undefined, async return, async throw, bare promise, `return` without `await` still a SyntaxError); the live bench waits for the Safari restart. Console lines logged after the first `await` are not captured (the console wrap is restored when the sync part returns).
+- Decided: `batch` pins the tab's socket for its duration, so steps stop paying a `tabs_context` round trip to every browser each; resolved at the first non-wait step so a wait-only batch makes no lookup. Also: a non-numeric `wait` is 0 ms (was `NaNms`), and a schema failure is reported on one line (`action: Invalid option...`) instead of Zod's JSON dump. Bridge tests 11/11, and the harness now kills leftover bridge children in an `after` hook so a failing test cannot hang `node --test`.
+- Finding: the toolbar icon looked blurry (Daniel's screenshot, tinted toolbar). The twelve 0.06-weight hairlines from 2026-09-29 blur into a gray blob once Safari tints the alpha, at every size. Redrawn with `scripts/make-toolbar-icons.py` (ImageMagick): 8 spokes at 0.10 weight for 24 px and under, 12 spokes at 0.085 with a near-solid centre for 32 px and up (what a Retina Mac renders for a 16-20 pt button). The thinning in September was to stop the centre merging; the spokes now start further out instead.
+- Finding: the shipped build is `scripts/build-notarized.sh` output installed to `~/Applications` (notarytool Accepted, stapled, spctl "Notarized Developer ID"); the repo moved to `~/Developer/safari/claude-in-safari` (the plan's `~/developer/claude-in-safari` path is stale).
+
+### 2026-10-10
 ### 2026-10-10
 - Finding: bench baseline before speed fixes (`bridge/bench.js`, 7s settle). The plan's LinkedIn and Workday URLs no longer time out (every probe under 100 ms, in Safari 27.2), so they cannot judge the fixes. Pages with ad iframes do: on w3schools.com/html/html_iframe.asp (8 iframes), speedtest.net (10) and weather.com (34), `find`, `read_page` and `get_page_text` all failed with "timed out" at 15000 ms, in both Safari 27.2 and STP. Run with no settle time, the bench reads pages before they render (Workday `read_page` returned 2 bytes).
 - Finding: after parallel subframes + ad-frame skip (STP, same pages): w3schools 10-21 ms, speedtest 30-36 ms, weather.com 515-640 ms, all `ok`; example.com unchanged (3-8 ms).

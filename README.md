@@ -59,7 +59,16 @@ claude mcp add claude-in-safari -- node "$PWD/bridge/server.js"
 
 Tools: `tabs_context`, `navigate`, `get_page_text`, `read_page`, `find`,
 `computer` (click / type / key / scroll / set), `javascript`, `read_console`,
-`read_network`, `tab` (close / reload / back / forward), `screenshot`, `ping`.
+`read_network`, `tab` (close / reload / back / forward), `screenshot`, `ping`,
+`batch`.
+
+- `javascript` accepts `await`: code that uses it runs as an async function and returns
+  what you `return` (12 s limit); synchronous code still returns its last expression.
+- `batch` runs up to 30 tool steps on one tab in order, in one call. Each step is
+  `{tool, args}` with `tabId` inherited; tools are `computer`, `javascript`, `find`,
+  `get_page_text`, `read_page`, `navigate`, `tab`, or `wait` (`{ms}`, max 5000). It stops
+  at the first failing step unless `stopOnError` is false. Screenshots are not allowed in
+  a batch.
 
 ## Security
 

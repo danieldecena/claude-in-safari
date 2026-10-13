@@ -3,9 +3,10 @@
 - [x] Safari speed T1: bench page tools, record baseline
 - [x] Safari speed T2: parallel subframes + ad-frame skip
 - [x] Safari speed T3: shadow DOM, 8s budget (checkVisibility measured, not kept)
-- [ ] Safari speed T4: async javascript (parked promise + poll)
+- [x] Safari speed T4: async javascript (parked promise + poll); live bench after the next Safari restart
 - [x] Safari speed T5: batch tool in the bridge -- b240952
-- [ ] Safari speed T6: recipes + skill upload copies
+- [ ] Safari speed T6: recipes + skill upload copies (docs written; Daniel uploads the SKILL.md copies and runs the live Workday fill)
+- [ ] Redraw the blurry toolbar icon (scripts/make-toolbar-icons.py); check in Safari after the restart
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript
