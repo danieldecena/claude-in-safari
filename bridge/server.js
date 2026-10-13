@@ -115,10 +115,16 @@ function joinHub() {
 // Hub side: run a relay's call against the named extension context and send the answer back.
 const contextsMsg = () => JSON.stringify({ type: "contexts", contexts: [...socks].map(([origin, s]) => ({ origin, ua: s.ua })) });
 const broadcastContexts = () => { for (const r of relays) r.send(contextsMsg()); };
+// The extension's toolbar popup shows this: how many Claude sessions share the bridge (this one
+// plus its relays) and how long the bridge has been up. Hub side only; a relay's `socks` hold
+// stand-ins, not extension sockets, and onConnection/onRelay never run there.
+const statusMsg = () => JSON.stringify({ type: "status", sessions: 1 + relays.size, bootedAt });
+const broadcastStatus = () => { for (const s of socks.values()) if (s.readyState === s.OPEN) s.send(statusMsg()); };
 function onRelay(sock) {
   log("relay joined");
   relays.add(sock);
   sock.send(contextsMsg());
+  broadcastStatus();
   sock.on("message", (data) => {
     let msg;
     try { msg = JSON.parse(data); } catch { return log("dropped malformed message from relay"); }
@@ -127,7 +133,7 @@ function onRelay(sock) {
       (e) => sock.send(JSON.stringify({ id: msg.id, error: e.message })),
     );
   });
-  sock.on("close", () => { relays.delete(sock); log("relay left"); });
+  sock.on("close", () => { relays.delete(sock); log("relay left"); broadcastStatus(); });
 }
 
 function settle(msg) {
@@ -144,6 +150,7 @@ function onConnection(sock, req) {
   socks.get(origin)?.close();
   socks.set(origin, sock);
   ext = sock;
+  sock.send(statusMsg());
   sock.on("message", (data) => {
     let msg;
     try { msg = JSON.parse(data); } catch { return log("dropped malformed message from", origin); }

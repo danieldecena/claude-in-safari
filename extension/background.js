@@ -58,7 +58,7 @@ function connect() {
   };
   ws.onclose = (ev) => {
     // A Reconnect from the popup may already have opened the replacement socket.
-    if (ev.target === ws) connectedAt = null;
+    if (ev.target === ws) { connectedAt = null; bridgeStatus = null; }
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 5000);
   };
@@ -239,7 +239,15 @@ chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
 // Called by popup.js through getBackgroundPage(): Safari's runtime.onMessage replies are
 // unreliable (see content.js), and top-level functions are properties of this window.
 function popupStatus() {
-  return { connected: ws?.readyState === WebSocket.OPEN, connectedAt, lastCommand, port: PORT };
+  return {
+    connected: ws?.readyState === WebSocket.OPEN,
+    connectedAt,
+    port: PORT,
+    recent: recent.map((e) => ({ ...e })),
+    bridge: bridgeStatus,
+    contentVersion,
+    browser: navigator.userAgent.match(/Version\/[\d.]+/)?.[0]?.replace("Version/", "Safari ") ?? "Safari",
+  };
 }
 
 function popupReconnect() {
