@@ -304,8 +304,8 @@ if (process.argv.includes("--spike")) {
   tool(
     "javascript",
     {
-      description: "Run JavaScript in a tab and return the last expression's value. Executes in the content-script world: full DOM access, but not the page's own JS variables; synchronous code only.",
-      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned"), frameId: z.number().int().optional().describe("run in this iframe: the N from a [frame fN] header of read_page, e.g. 236223201282 (Safari frame ids are large; pass them whole); default is the top frame") }),
+      description: "Run JavaScript in a tab. Sync code returns its last expression. Code that uses await runs as an async function: use `return` for the result (12s limit). Content-script world: full DOM access, not the page's own JS variables.",
+      inputSchema: z.object({ tabId, code: z.string().describe("JavaScript source; the value of the last expression is returned, or the `return` value when the code uses await"), frameId: z.number().int().optional().describe("run in this iframe: the N from a [frame fN] header of read_page, e.g. 236223201282 (Safari frame ids are large; pass them whole); default is the top frame") }),
     },
     async (p) => text(await onTab("javascript", p)),
   );

@@ -105,6 +105,19 @@ async function withFrames(tabId, method, params, top) {
   return top + subs.map((f) => `\n[frame f${f.frameId} ${f.url}]\n${f.r.trim() ? f.r : "(no headings, links or fields)"}`).join("");
 }
 
+// Polls an async javascript call parked by content.js; 12s stays under the bridge's 15s timeout.
+async function pollJs(tabId, id, frameId) {
+  const at = frameId ? { frameId } : {};
+  const deadline = Date.now() + 12000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100));
+    const [r] = await chrome.tabs.executeScript(tabId, { code: `window.__cis.poll(${id})`, ...at });
+    if (r?.error) throw new Error(r.error);
+    if (r && !r.pending) return r.result;
+  }
+  throw new Error("javascript: async code still running after 12s");
+}
+
 async function handle(method, params) {
   switch (method) {
     case "ping":
@@ -177,7 +190,8 @@ async function handle(method, params) {
     }
     case "javascript": {
       if (params.frameId) await requireFrame(params.tabId, params.frameId, "javascript", "re-run read_page");
-      return inPage(params.tabId, method, params, params.frameId);
+      const r = await inPage(params.tabId, method, params, params.frameId);
+      return r?.__cis_pending ? pollJs(params.tabId, r.__cis_pending, params.frameId) : r;
     }
     case "read_console":
     case "read_network":

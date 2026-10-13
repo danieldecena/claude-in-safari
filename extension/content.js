@@ -5,8 +5,8 @@
 // (their refs reset, so re-run read_page after an update). No top-level bindings here:
 // executeScript re-runs this file in the same isolated world, and a top-level const
 // would throw a redeclaration SyntaxError on every call after the first.
-if ((window.__cis?.version ?? 0) < 9) {
-  const CIS_VERSION = 9;
+if ((window.__cis?.version ?? 0) < 10) {
+  const CIS_VERSION = 10;
 
   // Console capture (manifest injects this file at document_start so early logs are seen).
   // console.* runs in the page world, so a hook is injected there and relayed via postMessage;
@@ -213,6 +213,19 @@ if ((window.__cis?.version ?? 0) < 9) {
     return { scrollX: Math.round(scrollX), scrollY: Math.round(scrollY), maxY: Math.max(0, document.documentElement.scrollHeight - innerHeight) };
   };
 
+  // Async code (anything using await) runs as an async function: its `return` is the result.
+  // The reply channel to background does not deliver, so a pending promise is parked here and
+  // background polls window.__cis.poll(id).
+  const parked = new Map();
+  let nextParked = 1;
+  const settle = (result) => {
+    try {
+      JSON.stringify(result);
+      return { result: result === undefined ? "undefined" : result };
+    } catch {
+      return { result: String(result) };
+    }
+  };
   // The content-script world has its own console, which the page-world hook never sees;
   // wrap it for the duration of the eval so the code's own logs reach read_console.
   const javascript = ({ code }) => {
@@ -222,13 +235,21 @@ if ((window.__cis?.version ?? 0) < 9) {
       console[level] = (...args) => { push(level, args.map(fmt).join(" ")); return orig[level].apply(console, args); };
     }
     try {
-      const result = (0, eval)(code);
+      let result;
       try {
-        JSON.stringify(result);
-        return { result: result === undefined ? "undefined" : result };
-      } catch {
-        return { result: String(result) };
+        result = (0, eval)(code);
+      } catch (e) {
+        if (!(e instanceof SyntaxError && /\bawait\b/.test(code))) throw e;
+        result = (0, eval)(`(async () => {\n${code}\n})()`);
       }
+      if (typeof result?.then !== "function") return settle(result);
+      const id = nextParked++;
+      parked.set(id, { done: false });
+      result.then(
+        (v) => parked.set(id, { done: true, out: settle(v) }),
+        (e) => parked.set(id, { done: true, error: String(e?.message ?? e) }),
+      );
+      return { __cis_pending: id };
     } finally {
       Object.assign(console, orig);
     }
@@ -289,6 +310,13 @@ if ((window.__cis?.version ?? 0) < 9) {
       } catch (e) {
         return { error: String(e?.message ?? e) };
       }
+    },
+    poll: (id) => {
+      const p = parked.get(id);
+      if (!p) return { error: `javascript call ${id} is gone (the page navigated or reloaded)` };
+      if (!p.done) return { pending: true };
+      parked.delete(id);
+      return p.error ? { error: p.error } : { result: p.out };
     },
   };
 }
