@@ -16,7 +16,7 @@
 ## Next Up
 - Daniel: `/mcp reconnect claude-in-safari` in the terminal Claude session (the one started in this repo; the Xcode session has no such server). Until then the holder bridge is the pre-15:17 server.js: no `batch` fixes, no new `javascript` description, and the popup falls back to "connected Ns ago" instead of the session count and bridge uptime.
 - Daniel: open the toolbar popup after that reconnect and send a screenshot; expected "Safari 27.2 · 1 Claude session · bridge up Nm", a Recent list, and "Claude in Safari 0.1.0 · content.js v10" at the bottom.
-- T6 acceptance: upload `docs/skill-uploads/*/SKILL.md` to claude.ai (Settings > Capabilities > Skills) and fill one Workday Application Questions page with the `batch` recipe; record the call count here.
+- T6 acceptance: fill one Workday Application Questions page with the `batch` recipe from the terminal Claude session and record the call count here (the three SKILL.md copies were uploaded to claude.ai on 2026-10-13 via Replace in Settings > Skills).
 - Fix the iCloud Mail tab that refuses scripts (Known broken above). An uncommitted `debug_tab` probe in `extension/background.js` is stashed for it (`git stash list`).
 
 ## Decision log

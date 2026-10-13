@@ -5,7 +5,7 @@
 - [x] Safari speed T3: shadow DOM, 8s budget (checkVisibility measured, not kept)
 - [x] Safari speed T4: async javascript (parked promise + poll); live-checked in Safari 27.2 2026-10-13
 - [x] Safari speed T5: batch tool in the bridge -- b240952
-- [ ] Safari speed T6: recipes + skill upload copies (docs written; Daniel uploads the SKILL.md copies and runs the live Workday fill)
+- [ ] Safari speed T6: recipes + skill upload copies (docs written, skills uploaded 2026-10-13; live Workday fill count still to record)
 - [x] Redraw the blurry toolbar icon (scripts/make-toolbar-icons.py); confirmed in Safari 2026-10-13
 - [x] Toolbar popup dashboard (sessions, uptime, recent commands, versions); screenshot check pending
 - [ ] Remove or keep the `debug_tab` probe in background.js (landed via auto-commit f92c507)
