@@ -1,5 +1,6 @@
 ## Tasks
-- [ ] Fix iCloud Mail tab refusing scripts
+- [x] Fix iCloud Mail tab refusing scripts — root cause was restored-but-never-shown tabs having no main frame; `inPage` now wakes them
+- [x] Keep the `debug_tab` probe in background.js (not an MCP tool; it found the unloaded-tab bug)
 - [x] Safari speed T1: bench page tools, record baseline
 - [x] Safari speed T2: parallel subframes + ad-frame skip
 - [x] Safari speed T3: shadow DOM, 8s budget (checkVisibility measured, not kept)
@@ -9,7 +10,6 @@
 - [ ] Record the Workday batch-fill call count on the next Workday application (deferred 2026-10-13, no job in queue)
 - [x] Redraw the blurry toolbar icon (scripts/make-toolbar-icons.py); confirmed in Safari 2026-10-13
 - [x] Toolbar popup dashboard (sessions, uptime, recent commands, versions); screenshot check pending
-- [ ] Remove or keep the `debug_tab` probe in background.js (landed via auto-commit f92c507)
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript

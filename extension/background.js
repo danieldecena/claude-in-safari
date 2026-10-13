@@ -72,6 +72,7 @@ async function inPage(tabId, method, params, frameId, { retryMs = 5000 } = {}) {
   const code = `window.__cis.run(${JSON.stringify(method)}, ${JSON.stringify(params)})`;
   const deadline = Date.now() + retryMs;
   let last = "no result";
+  let woke = false;
   for (;;) {
     try {
       const at = frameId ? { frameId } : {};
@@ -84,10 +85,29 @@ async function inPage(tabId, method, params, frameId, { retryMs = 5000 } = {}) {
       if (e.fromPage) throw e;
       last = String(e?.message ?? e);
     }
+    if (!woke && !frameId) {
+      woke = true;
+      if (await wakeIfUnloaded(tabId)) continue;
+    }
     if (Date.now() + 250 >= deadline) break;
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`tab ${tabId} did not accept the script (still loading or not scriptable): ${last}`);
+}
+
+// A tab Safari restored in the background has no web content yet: tabs.get reports its URL
+// and status "complete", but it has no main frame, executeScript returns nothing, and
+// tabs.reload does not load it (STP 27.0, 2026-10-13). Showing it for a moment makes Safari
+// load it, and the load carries on after the previous tab is put back.
+async function wakeIfUnloaded(tabId) {
+  if ((await allFrames(tabId)).length) return false;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || tab.active) return false;
+  const [prev] = await chrome.tabs.query({ windowId: tab.windowId, active: true });
+  await chrome.tabs.update(tabId, { active: true });
+  await new Promise((r) => setTimeout(r, 350));
+  if (prev && prev.id !== tabId) await chrome.tabs.update(prev.id, { active: true }).catch(() => {});
+  return true;
 }
 
 // Page tools reach the top frame only; the reading tools also visit each subframe so an app
