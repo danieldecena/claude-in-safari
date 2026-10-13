@@ -11,6 +11,7 @@
 - Safari speed fixes, live in Safari 27.2 (2026-10-13): pages with ad iframes read in tens of ms instead of timing out; `find`/`read_page` enter open shadow roots; `javascript` with `await` returns in ~400 ms and a never-settling promise fails at 12.2 s with "async code still running after 12s" (not the bridge's 15 s timeout); `batch` runs steps in one call (bridge tests 11/11).
 
 - Restored-but-unloaded tabs are scriptable again (2026-10-13, STP 27.0): `javascript` on an untouched restored iCloud Mail tab returned in ~2 s, the previously active tab stayed active, and later calls took ~60 ms.
+- One extension copy per browser after the 15:52 restart (2026-10-13): `pluginkit` lists only the `~/Applications` appex, `tabs_context` returns exactly two contexts (`Version/27.2`, `Version/27.0`), both report content.js v10, and `batch` with `find` + `wait` + an `await` readback runs in one call in each browser.
 
 ## Known broken
 - (nothing open)
@@ -19,7 +20,7 @@
 - Daniel: `/mcp reconnect claude-in-safari` in the terminal Claude session (the one started in this repo; the Xcode session has no such server). Until then the holder bridge is the pre-15:17 server.js: no `batch` fixes, no new `javascript` description, and the popup falls back to "connected Ns ago" instead of the session count and bridge uptime.
 - Daniel: open the toolbar popup after that reconnect and send a screenshot; expected "Safari 27.2 · 1 Claude session · bridge up Nm", a Recent list, and "Claude in Safari 0.1.0 · content.js v10" at the bottom.
 - Deferred (no Workday job in the queue on 2026-10-13): the T6 acceptance fill. On the next Workday application, fill the Application Questions page with the `batch` recipe from the terminal Claude session and record the call count here; target 1-2 calls after the initial `find`. The batch flow itself is verified end to end on example.com (click, wait, sync and async readback in one call).
-- Daniel: quit and reopen both Safari and STP when convenient. That drops the duplicate extension copy (Settings > Extensions should show one "Claude in Safari" row, and the bridge one context per browser) and gives Safari 27.2 the restored-tab wake fix, which only STP has so far.
+- (nothing blocking; see the deferred Workday count above)
 
 ## Decision log
 ### 2026-10-13
