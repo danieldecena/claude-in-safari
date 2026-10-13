@@ -30,17 +30,20 @@ Safari picked up a reinstalled build without a restart on 2026-10-13; STP needs 
 Confirm with `javascript` code `window.__cis.version` (must equal `CIS_VERSION` in content.js),
 and `ping` for a fresh `uptimeMs` (a background.js change needs a new context, not just a new file).
 
-**After every install, re-register the appex** or STP will relaunch with no extension context
-at all (the build re-registers the DerivedData copy and displaces the installed one):
+**Install with `zsh scripts/install-app.sh`, never a bare `ditto`.** xcodebuild registers the
+appex it just built under DerivedData, which displaces the installed one; the script copies the
+app, de-registers every other copy, registers the installed one, and opens it. Then quit and
+reopen both browsers.
 
-```sh
-pluginkit -a "$HOME/Applications/Claude in Safari.app/Contents/PlugIns/Claude in Safari Extension.appex"
-open "$HOME/Applications/Claude in Safari.app"
-# verify: pluginkit -mAvvv -p com.apple.Safari.web-extension | grep -A1 claude-in-safari.Extension | grep Path
-```
+Two symptoms of a wrong registration, both seen 2026-10-13:
 
-Symptom when this is wrong: the relay lists only `Version/27.2` and every STP call answers
-"no context matching".
+- STP launches with no extension context: the relay lists only `Version/27.2` and every STP
+  call answers "no context matching".
+- Both copies load at once: Safari Settings > Extensions shows two "Claude in Safari" rows, and
+  the bridge reports two contexts per browser listing the same tabs under different tab ids.
+
+Check with `pluginkit -mAvvv -p com.apple.Safari.web-extension | grep -A1 claude-in-safari.Extension`
+(exactly one Path, under `~/Applications`) and by counting contexts from the relay.
 
 ## What cannot be captured
 
