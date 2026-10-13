@@ -51,7 +51,8 @@ async function refresh() {
     for (const e of s.recent) {
       list.append(
         cell("method", e.method),
-        cell("title", e.title ?? (e.tabId == null ? "(new tab)" : `tab ${e.tabId}`)),
+        // Only navigate without a tabId opens a new tab; ping and tabs_context have no tab at all.
+        cell("title", e.title ?? (e.tabId != null ? `tab ${e.tabId}` : e.method === "navigate" ? "(new tab)" : "")),
         cell("when", ago(e.at)),
       );
     }
