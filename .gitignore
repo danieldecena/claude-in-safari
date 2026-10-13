@@ -2,3 +2,6 @@ node_modules/
 DerivedData/
 build/
 .DS_Store
+
+# upload bundles built from docs/skill-uploads/*/SKILL.md
+docs/skill-uploads/*.zip
