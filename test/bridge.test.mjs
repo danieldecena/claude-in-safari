@@ -1,6 +1,6 @@
 // Protocol tests for bridge/server.js against a fake extension: no Safari needed.
 //   cd bridge && node --test ../test/
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -11,8 +11,14 @@ const TOKEN = readFileSync(new URL("../extension/background.js", import.meta.url
 const ORIGIN = "safari-web-extension://00000000-test";
 let nextPort = 19000 + (process.pid % 500) * 2;
 
+// A test that throws before its b.stop() would leave the bridge child alive and node --test
+// hanging; kill every bridge this file spawned once all tests are done.
+const children = new Set();
+after(() => { for (const p of children) p.kill(); });
+
 function startBridge(port, env = {}) {
   const p = spawn("node", ["server.js"], { cwd: new URL("../bridge/", import.meta.url), env: { ...process.env, CIS_PORT: String(port), ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  children.add(p);
   let buf = "", n = 0, err = "";
   const waiters = new Map();
   p.stderr.on("data", (d) => (err += d));
@@ -161,6 +167,20 @@ test("batch runs steps in order and stops at the first failure", { timeout: 3000
   assert.match(r.text, /stopped at step 2 of 3/);
   assert.doesNotMatch(r.text, /^3\./m);
   assert.deepEqual(seen.filter((s) => s !== "tabs_context"), ["computer:ref_1", "javascript"]);
+  assert.equal(seen.filter((s) => s === "tabs_context").length, 1, "a batch looks the tab's context up once, not once per step");
+  ws.close(); b.stop();
+});
+
+test("batch reports a schema failure on one line and treats a non-numeric wait as 0", { timeout: 30000 }, async () => {
+  const port = nextPort++, b = startBridge(port);
+  await b.ready; await new Promise((r) => setTimeout(r, 500));
+  const ws = await dial(port), seen = []; scripted(ws, seen);
+  const r = await b.call("batch", { tabId: 7, stopOnError: false, steps: [
+    { tool: "wait", args: { ms: "soon" } },
+    { tool: "computer", args: { action: "poke", ref: "ref_1" } },
+  ] });
+  assert.match(r.text, /^1\. wait 0ms$/m);
+  assert.match(r.text, /^2\. computer failed: [^\n]*action[^\n]*$/m, "schema errors must stay on one line");
   ws.close(); b.stop();
 });
 

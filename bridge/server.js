@@ -250,11 +250,15 @@ if (process.argv.includes("--spike")) {
       return text({ context: c.context, ...(await call("navigate", { url, tabId }, c.sock)) });
     },
   );
-  const onTab = async (method, params) => {
-    const c = (await contexts()).find((c) => c.tabs.some((t) => t.tabId === params.tabId));
-    if (!c) throw new Error(`no context owns tab ${params.tabId}; call tabs_context`);
-    return call(method, params, c.sock);
+  const ownerOf = async (tabId) => {
+    const c = (await contexts()).find((c) => c.tabs.some((t) => t.tabId === tabId));
+    if (!c) throw new Error(`no context owns tab ${tabId}; call tabs_context`);
+    return c.sock;
   };
+  // A running batch pins its tab's socket here, so its steps skip the per-call tabs_context
+  // round trip to every browser (a tab never changes context while it exists).
+  const batchOwners = new Map();
+  const onTab = async (method, params) => call(method, params, batchOwners.get(params.tabId) ?? await ownerOf(params.tabId));
   const tabId = z.number().int().describe("Tab id from tabs_context");
   tool(
     "get_page_text",
@@ -359,24 +363,32 @@ if (process.argv.includes("--spike")) {
     },
     async ({ tabId, steps, stopOnError = true }) => {
       const out = [];
-      for (const [i, s] of steps.entries()) {
-        const n = i + 1;
-        try {
-          if (s.tool === "wait") {
-            const ms = Math.min(Math.max(Number(s.args?.ms ?? 0), 0), 5000);
-            await new Promise((r) => setTimeout(r, ms));
-            out.push(`${n}. wait ${ms}ms`);
-            continue;
-          }
-          const r = await handlers[s.tool]({ ...s.args, tabId: s.args?.tabId ?? tabId });
-          out.push(`${n}. ${s.tool}: ${r.content.map((c) => c.text ?? `[${c.type}]`).join("\n")}`);
-        } catch (e) {
-          out.push(`${n}. ${s.tool} failed: ${e.message}`);
-          if (stopOnError) {
-            out.push(`stopped at step ${n} of ${steps.length}`);
-            break;
+      // Zod's message is a multi-line JSON dump; one step gets one line.
+      const reason = (e) => (e?.issues ? e.issues.map((i) => `${i.path.join(".") || "args"}: ${i.message}`).join("; ") : String(e?.message ?? e));
+      try {
+        for (const [i, s] of steps.entries()) {
+          const n = i + 1;
+          try {
+            if (s.tool === "wait") {
+              const ms = Math.min(Math.max(Number(s.args?.ms) || 0, 0), 5000);
+              await new Promise((r) => setTimeout(r, ms));
+              out.push(`${n}. wait ${ms}ms`);
+              continue;
+            }
+            // Looked up at the first real step, so a wait-only batch costs no round trip.
+            if (!batchOwners.has(tabId)) batchOwners.set(tabId, await ownerOf(tabId));
+            const r = await handlers[s.tool]({ ...s.args, tabId: s.args?.tabId ?? tabId });
+            out.push(`${n}. ${s.tool}: ${r.content.map((c) => c.text ?? `[${c.type}]`).join("\n")}`);
+          } catch (e) {
+            out.push(`${n}. ${s.tool} failed: ${reason(e)}`);
+            if (stopOnError) {
+              out.push(`stopped at step ${n} of ${steps.length}`);
+              break;
+            }
           }
         }
+      } finally {
+        batchOwners.delete(tabId);
       }
       return text_(out.join("\n"));
     },
