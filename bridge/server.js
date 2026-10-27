@@ -101,6 +101,7 @@ function joinHub() {
   let joined = false;
   hub.on("open", () => {
     joined = true;
+    watch(hub);
     log(`port ${PORT} is held by another session's bridge; relaying through it`);
   });
   hub.on("message", (data) => {

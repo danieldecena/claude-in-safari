@@ -270,3 +270,18 @@ test("heartbeat: a peer that never answers a ping is left connected", { timeout:
   assert.equal(closed, false, "no pong ever seen means pings are unsupported, not that the peer is dead");
   mute.close(); b.stop();
 });
+
+test("heartbeat: a relay drops a hub that froze instead of waiting on it forever", { timeout: 30000 }, async () => {
+  const port = nextPort++, hub = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
+  await hub.ready; await new Promise((r) => setTimeout(r, 500));
+  const relay = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
+  await relay.ready; await new Promise((r) => setTimeout(r, 1000));
+  assert.match(relay.stderr(), /relaying through it/, "precondition: second must have joined as a relay");
+  assert.doesNotMatch(relay.stderr(), /dropping socket/, "a healthy hub must not be dropped");
+  hub.p.kill("SIGSTOP"); // socket stays open, nothing answers: a half-open hub
+  await new Promise((r) => setTimeout(r, 2500));
+  hub.p.kill("SIGCONT");
+  assert.match(relay.stderr(), /dropping socket/);
+  assert.match(relay.stderr(), /hub went away; rebinding/);
+  hub.stop(); relay.stop();
+});
