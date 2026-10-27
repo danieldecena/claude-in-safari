@@ -12,7 +12,7 @@
 - [x] Toolbar popup dashboard (sessions, uptime, recent commands, versions); screenshot check pending
 - [ ] [you] Reinstall the app, then restart the bridge (new token)
 - [ ] Check a real connection survives the 20s ping heartbeat
-- [ ] Confirm the built appex bundles token-js (Xcode wiring)
+- [x] Confirm the built appex bundles token-js (Xcode wiring) — 1830c7e
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript
