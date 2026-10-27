@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { WebSocket } from "../bridge/node_modules/ws/wrapper.mjs";
 
-const TOKEN = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w+)"/m)[1];
+const TOKEN = readFileSync(new URL("../extension/token.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w+)"/m)[1];
 const ORIGIN = "safari-web-extension://00000000-test";
 let nextPort = 19000 + (process.pid % 500) * 2;
 
@@ -227,4 +227,46 @@ test("batch caps wait at 5000ms and refuses screenshot", { timeout: 30000 }, asy
   const s = await b.call("batch", { tabId: 7, steps: [{ tool: "screenshot" }] });
   assert.ok(s.error, "screenshot must be rejected by the schema");
   ws.close(); b.stop();
+});
+
+// ws answers pings on its own; autoPong: false lets a test decide when the peer goes silent.
+// Each context needs its own origin: a second connection from the same one replaces the first.
+const quietDial = (port, origin = ORIGIN) => new Promise((resolve) => {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/?token=${TOKEN}`, { origin, autoPong: false });
+  ws.on("open", () => resolve(ws));
+});
+
+test("heartbeat: a peer that keeps answering pings stays; one that goes silent is dropped", { timeout: 30000 }, async () => {
+  const port = nextPort++, b = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
+  await b.ready; await new Promise((r) => setTimeout(r, 500));
+
+  const good = await quietDial(port);
+  let goodClosed = false, goodPings = 0;
+  good.on("ping", () => { goodPings++; good.pong(); });
+  good.on("close", () => (goodClosed = true));
+
+  const bad = await quietDial(port, "safari-web-extension://00000000-bad");
+  let badClosed = false, answered = false;
+  bad.on("ping", () => { if (!answered) { answered = true; bad.pong(); } });
+  bad.on("close", () => (badClosed = true));
+
+  await new Promise((r) => setTimeout(r, 2500));
+  assert.ok(goodPings >= 5, `known-good peer was pinged ${goodPings} times`);
+  assert.equal(goodClosed, false, "a peer that answers every ping must stay connected");
+  assert.equal(badClosed, true, "a peer that answered once and then went silent must be dropped");
+  assert.match(b.stderr(), /dropping socket/);
+  good.close(); b.stop();
+});
+
+test("heartbeat: a peer that never answers a ping is left connected", { timeout: 30000 }, async () => {
+  const port = nextPort++, b = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
+  await b.ready; await new Promise((r) => setTimeout(r, 500));
+  const mute = await quietDial(port);
+  let closed = false, pings = 0;
+  mute.on("close", () => (closed = true));
+  mute.on("ping", () => pings++);
+  await new Promise((r) => setTimeout(r, 2000));
+  assert.ok(pings >= 3, `the heartbeat must actually have pinged it (${pings})`);
+  assert.equal(closed, false, "no pong ever seen means pings are unsupported, not that the peer is dead");
+  mute.close(); b.stop();
 });

@@ -6,6 +6,7 @@
 # Needs the "Developer ID Application" cert and the notarytool keychain profile `notary`.
 set -euo pipefail
 cd "${0:A:h}/.."
+sh scripts/make-token.sh
 ID="Developer ID Application: Daniel Decena (877MLS29T9)"
 DD="DerivedData/devid"
 xcodebuild -project "Claude in Safari/Claude in Safari.xcodeproj" -scheme "Claude in Safari" \

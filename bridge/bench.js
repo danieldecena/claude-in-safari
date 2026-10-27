@@ -6,7 +6,7 @@ import { WebSocket } from "ws";
 import { readFileSync } from "node:fs";
 
 const PORT = Number(process.env.CIS_PORT ?? 18765);
-const TOKEN = readFileSync(new URL("../extension/background.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w+)"/m)[1];
+const TOKEN = readFileSync(new URL("../extension/token.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w+)"/m)[1];
 const urls = process.argv.slice(2);
 if (!urls.length) { console.error("usage: node bench.js <url>..."); process.exit(2); }
 

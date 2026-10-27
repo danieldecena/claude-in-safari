@@ -5,3 +5,4 @@ build/
 
 # upload bundles built from docs/skill-uploads/*/SKILL.md
 docs/skill-uploads/*.zip
+extension/token.js

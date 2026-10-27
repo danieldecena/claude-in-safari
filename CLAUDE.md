@@ -15,15 +15,18 @@ Read README.md first for what this is and how the pieces connect.
   the second run. Everything lives inside the `window.__cis` version guard — bump
   `CIS_VERSION` when handlers change so already-open pages replace theirs, and bump the
   literal in the guard line above it to match (it cannot reference the const).
-- **`CIS_TOKEN` is defined once**, in `extension/background.js`; the bridge regex-parses
-  it from that file at startup (`^const CIS_TOKEN = "(\w+)"`). Renaming or reformatting
-  that line breaks the bridge's startup.
+- **`CIS_TOKEN` is defined once**, in `extension/token.js`, which is gitignored: the repo
+  is public and the token is the only thing keeping other local processes off the bridge.
+  `sh scripts/make-token.sh` creates it (`--rotate` replaces it; `pnpm test` and
+  `build-notarized.sh` call it). The bridge regex-parses `^const CIS_TOKEN = "(\w{32})"` from
+  that file. Never paste the value into a tracked file, a doc or a commit message.
 - **After touching `extension/`**, rebuild the app and reload the extension in Safari
   — the running extension is a copy inside the built `.appex`, not the source files.
 
 ## Build / run
 
 ```sh
+sh scripts/make-token.sh   # once per checkout; the built extension carries this token
 xcodebuild -project "Claude in Safari/Claude in Safari.xcodeproj" \
   -scheme "Claude in Safari" -configuration Debug \
   -derivedDataPath DerivedData build

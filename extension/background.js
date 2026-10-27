@@ -1,10 +1,8 @@
 // Connects out to the bridge (bridge/server.js). The bridge owns the socket because a
 // Safari service worker cannot listen; it can only dial.
 const PORT = 18765;
-// Shared secret: any Safari extension has a safari-web-extension:// origin, so origin alone
-// doesn't identify this one. The bridge parses this constant out of this file at startup;
-// rotate it here and rebuild the app (both sides then agree again).
-const CIS_TOKEN = "d11d671f3903c626b5d99491d9693399";
+// CIS_TOKEN comes from token.js (gitignored, loaded first by the manifest): any Safari
+// extension has a safari-web-extension:// origin, so origin alone doesn't identify this one.
 
 const startedAt = Date.now();
 

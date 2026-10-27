@@ -35,6 +35,7 @@ Signing needs the free Apple Development cert (personal team) — ad-hoc
 dictionary failed" and the extension never connects).
 
 ```sh
+sh scripts/make-token.sh
 cd bridge && pnpm install && cd ..
 xcodebuild -project "Claude in Safari/Claude in Safari.xcodeproj" \
   -scheme "Claude in Safari" -configuration Debug \
@@ -74,11 +75,22 @@ Tools: `tabs_context`, `navigate`, `get_page_text`, `read_page`, `find`,
 
 Any Safari extension gets a `safari-web-extension://` origin, so origin alone does
 not identify this one. The extension appends `?token=<CIS_TOKEN>` when dialing, and
-the bridge — which parses the constant out of `extension/background.js` at startup,
-the single place it is defined — refuses any connection without it (verified: right
+the bridge — which parses the constant out of `extension/token.js` at startup, the
+single place it is defined — refuses any connection without it (verified: right
 origin + no token, wrong token, and right token + web origin are all rejected).
-To rotate: change `CIS_TOKEN` in `extension/background.js`, rebuild the app, reload
-the extension, restart the bridge. The bridge binds 127.0.0.1 only.
+`token.js` is gitignored and generated per checkout by `scripts/make-token.sh`, because
+this repo is public: a committed token authenticates nobody, and a process holding it
+could dial `/relay` and run JavaScript in any logged-in tab. (The token committed before
+2026-10-27 is in git history and is retired.)
+To rotate: `sh scripts/make-token.sh --rotate`, rebuild and reinstall the app
+(`scripts/install-app.sh`), restart Safari, then restart the bridge. Do the reinstall
+first: a restarted bridge rejects the old extension's token.
+The bridge binds 127.0.0.1 only, caps a message at 32 MB, and pings each socket every 20s;
+a socket that answered pings and then goes silent for three beats is dropped, so a
+half-open connection after sleep fails fast instead of timing every call out.
+`read_page` and `find` show `(N chars, hidden)` instead of the value for password,
+card-number, card-code, expiry and one-time-code fields. The MCP server tells Claude
+that page content is untrusted data.
 
 ## Testing the connection
 

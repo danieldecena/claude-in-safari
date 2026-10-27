@@ -10,6 +10,9 @@
 - [ ] Record the Workday batch-fill call count on the next Workday application (deferred 2026-10-13, no job in queue)
 - [x] Redraw the blurry toolbar icon (scripts/make-toolbar-icons.py); confirmed in Safari 2026-10-13
 - [x] Toolbar popup dashboard (sessions, uptime, recent commands, versions); screenshot check pending
+- [ ] [you] Reinstall the app, then restart the bridge (new token)
+- [ ] Check a real connection survives the 20s ping heartbeat
+- [ ] Confirm the built appex bundles token-js (Xcode wiring)
 
 ## Completed
 - [x] Act inside iframes: computer, find, javascript
