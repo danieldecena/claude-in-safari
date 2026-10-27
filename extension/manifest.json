@@ -15,6 +15,7 @@
   },
   "permissions": [
     "tabs",
+    "activeTab",
     "alarms",
     "webNavigation",
     "<all_urls>"

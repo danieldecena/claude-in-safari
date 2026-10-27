@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { WebSocket, WebSocketServer } from "ws";
 import * as z from "zod/v4";
-import { readFileSync } from "node:fs";
+import { TOKEN } from "./token.js";
 
 const PORT = Number(process.env.CIS_PORT ?? 18765);
 const BIND_RETRY_MS = Number(process.env.CIS_BIND_RETRY_MS ?? 3000);
@@ -15,14 +15,6 @@ const TIMEOUT_MS = 15000;
 const log = (...a) => console.error(new Date().toISOString(), ...a);
 const bootedAt = Date.now();
 
-// Shared secret read from extension/token.js, the single place it is defined and never
-// committed (the repo is public); the extension sends it back as ?token= when dialing.
-const TOKEN = (() => {
-  try {
-    return readFileSync(new URL("../extension/token.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w{32})"/m)?.[1];
-  } catch {}
-})();
-if (!TOKEN) throw new Error("no CIS_TOKEN in extension/token.js; run: sh scripts/make-token.sh");
 
 // One socket per extension context: every browser and every Safari profile loads its own
 // copy, each with a distinct safari-web-extension:// origin. A new connection from a known
@@ -78,17 +70,18 @@ function bind() {
 // A socket left half-open (Mac slept, Safari killed) never fires close, so every call to it
 // would wait out the 15s timeout. Ping frames find it: a peer that has answered one before
 // and misses the next two is terminated, which runs the normal close path. A peer that has
-// never answered is assumed not to support pings and is left alone.
+// never answered is assumed not to support pings and is left alone, with one logged warning.
 const HEARTBEAT_MS = Number(process.env.CIS_HEARTBEAT_MS ?? 20000);
 function watch(sock) {
-  let ponged = false, missed = 0;
+  let ponged = false, missed = 0, sent = 0;
   sock.on("pong", () => { ponged = true; missed = 0; });
   const t = setInterval(() => {
     if (ponged && ++missed > 2) {
       log("no pong for", missed - 1, "heartbeats; dropping socket");
       return sock.terminate();
     }
-    if (sock.readyState === WebSocket.OPEN) sock.ping();
+    if (!ponged && sent === 5) log("peer has not answered 5 pings; heartbeat is inactive for it");
+    if (sock.readyState === WebSocket.OPEN) { sock.ping(); sent++; }
   }, HEARTBEAT_MS);
   sock.on("close", () => clearInterval(t));
 }
@@ -97,7 +90,7 @@ function watch(sock) {
 // context the hub reports becomes a stand-in socket in `socks`, so the tools run unchanged.
 // When the hub goes away, rebind: one relay wins the port and the rest join it.
 function joinHub() {
-  const hub = new WebSocket(`ws://127.0.0.1:${PORT}/relay?token=${TOKEN}`);
+  const hub = new WebSocket(`ws://127.0.0.1:${PORT}/relay?token=${TOKEN}`, { handshakeTimeout: BIND_RETRY_MS });
   let joined = false;
   hub.on("open", () => {
     joined = true;

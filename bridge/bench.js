@@ -3,10 +3,9 @@
 //   cd bridge && node bench.js https://example.com https://www.linkedin.com/jobs/view/<id>/
 //   BENCH_UA=Version/27.0 picks Safari Technology Preview; BENCH_SETTLE_MS=7000 lets ad frames load.
 import { WebSocket } from "ws";
-import { readFileSync } from "node:fs";
+import { TOKEN } from "./token.js";
 
 const PORT = Number(process.env.CIS_PORT ?? 18765);
-const TOKEN = readFileSync(new URL("../extension/token.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w+)"/m)[1];
 const urls = process.argv.slice(2);
 if (!urls.length) { console.error("usage: node bench.js <url>..."); process.exit(2); }
 

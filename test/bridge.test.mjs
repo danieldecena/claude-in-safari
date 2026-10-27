@@ -3,11 +3,10 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { WebSocket } from "../bridge/node_modules/ws/wrapper.mjs";
+import { TOKEN } from "../bridge/token.js";
 
-const TOKEN = readFileSync(new URL("../extension/token.js", import.meta.url), "utf8").match(/^const CIS_TOKEN = "(\w+)"/m)[1];
 const ORIGIN = "safari-web-extension://00000000-test";
 let nextPort = 19000 + (process.pid % 500) * 2;
 
@@ -229,6 +228,15 @@ test("batch caps wait at 5000ms and refuses screenshot", { timeout: 30000 }, asy
   ws.close(); b.stop();
 });
 
+// Polls instead of sleeping a fixed time, so a loaded machine slows the test without failing it.
+const until = async (fn, ms = 10000) => {
+  for (const end = Date.now() + ms; !fn(); ) {
+    if (Date.now() > end) return false;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return true;
+};
+
 // ws answers pings on its own; autoPong: false lets a test decide when the peer goes silent.
 // Each context needs its own origin: a second connection from the same one replaces the first.
 const quietDial = (port, origin = ORIGIN) => new Promise((resolve) => {
@@ -250,38 +258,38 @@ test("heartbeat: a peer that keeps answering pings stays; one that goes silent i
   bad.on("ping", () => { if (!answered) { answered = true; bad.pong(); } });
   bad.on("close", () => (badClosed = true));
 
-  await new Promise((r) => setTimeout(r, 2500));
-  assert.ok(goodPings >= 5, `known-good peer was pinged ${goodPings} times`);
+  assert.ok(await until(() => badClosed), "a peer that answered once and then went silent must be dropped");
+  assert.ok(await until(() => goodPings >= 8), `known-good peer was pinged ${goodPings} times`);
   assert.equal(goodClosed, false, "a peer that answers every ping must stay connected");
-  assert.equal(badClosed, true, "a peer that answered once and then went silent must be dropped");
   assert.match(b.stderr(), /dropping socket/);
   good.close(); b.stop();
 });
 
-test("heartbeat: a peer that never answers a ping is left connected", { timeout: 30000 }, async () => {
+test("heartbeat: a peer that never answers is left connected, with one warning", { timeout: 30000 }, async () => {
   const port = nextPort++, b = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
   await b.ready; await new Promise((r) => setTimeout(r, 500));
   const mute = await quietDial(port);
   let closed = false, pings = 0;
   mute.on("close", () => (closed = true));
   mute.on("ping", () => pings++);
-  await new Promise((r) => setTimeout(r, 2000));
-  assert.ok(pings >= 3, `the heartbeat must actually have pinged it (${pings})`);
+  assert.ok(await until(() => pings >= 8), `the heartbeat must actually have pinged it (${pings})`);
   assert.equal(closed, false, "no pong ever seen means pings are unsupported, not that the peer is dead");
+  assert.equal(b.stderr().match(/has not answered 5 pings/g)?.length, 1, "the fallback must be visible, once");
   mute.close(); b.stop();
 });
 
-test("heartbeat: a relay drops a hub that froze instead of waiting on it forever", { timeout: 30000 }, async () => {
-  const port = nextPort++, hub = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
+test("heartbeat: a relay drops a frozen hub, keeps retrying, and rejoins when it thaws", { timeout: 30000 }, async () => {
+  const env = { CIS_HEARTBEAT_MS: "200", CIS_BIND_RETRY_MS: "300" };
+  const port = nextPort++, hub = startBridge(port, env);
   await hub.ready; await new Promise((r) => setTimeout(r, 500));
-  const relay = startBridge(port, { CIS_HEARTBEAT_MS: "200" });
-  await relay.ready; await new Promise((r) => setTimeout(r, 1000));
-  assert.match(relay.stderr(), /relaying through it/, "precondition: second must have joined as a relay");
+  const relay = startBridge(port, env);
+  await relay.ready;
+  assert.ok(await until(() => /relaying through it/.test(relay.stderr())), "precondition: second must have joined as a relay");
   assert.doesNotMatch(relay.stderr(), /dropping socket/, "a healthy hub must not be dropped");
   hub.p.kill("SIGSTOP"); // socket stays open, nothing answers: a half-open hub
-  await new Promise((r) => setTimeout(r, 2500));
+  assert.ok(await until(() => /dropping socket/.test(relay.stderr())), "frozen hub must be dropped");
+  assert.ok(await until(() => /refused to relay/.test(relay.stderr())), "the redial against a frozen hub must time out and retry, not hang");
   hub.p.kill("SIGCONT");
-  assert.match(relay.stderr(), /dropping socket/);
-  assert.match(relay.stderr(), /hub went away; rebinding/);
+  assert.ok(await until(() => relay.stderr().match(/relaying through it/g)?.length >= 2), "relay must rejoin once the hub answers again");
   hub.stop(); relay.stop();
 });

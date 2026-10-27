@@ -88,8 +88,9 @@ first: a restarted bridge rejects the old extension's token.
 The bridge binds 127.0.0.1 only, caps a message at 32 MB, and pings each socket every 20s;
 a socket that answered pings and then goes silent for three beats is dropped, so a
 half-open connection after sleep fails fast instead of timing every call out.
-`read_page` and `find` show `(N chars, hidden)` instead of the value for password,
-card-number, card-code, expiry and one-time-code fields. The MCP server tells Claude
+`read_page` and `find` show `(N chars, hidden)` instead of the value for password fields and
+for fields whose autocomplete hint, name or id marks them as card number, card code, expiry
+or one-time code. A card field named something else (say `field7`) is not caught. The MCP server tells Claude
 that page content is untrusted data.
 
 ## Testing the connection
