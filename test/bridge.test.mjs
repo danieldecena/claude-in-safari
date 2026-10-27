@@ -13,7 +13,8 @@ let nextPort = 19000 + (process.pid % 500) * 2;
 // A test that throws before its b.stop() would leave the bridge child alive and node --test
 // hanging; kill every bridge this file spawned once all tests are done.
 const children = new Set();
-after(() => { for (const p of children) p.kill(); });
+// SIGCONT first: a bridge a test froze with SIGSTOP never acts on SIGTERM and would hang the run.
+after(() => { for (const p of children) { p.kill("SIGCONT"); p.kill(); } });
 
 function startBridge(port, env = {}) {
   const p = spawn("node", ["server.js"], { cwd: new URL("../bridge/", import.meta.url), env: { ...process.env, CIS_PORT: String(port), ...env }, stdio: ["pipe", "pipe", "pipe"] });
@@ -285,11 +286,15 @@ test("heartbeat: a relay drops a frozen hub, keeps retrying, and rejoins when it
   const relay = startBridge(port, env);
   await relay.ready;
   assert.ok(await until(() => /relaying through it/.test(relay.stderr())), "precondition: second must have joined as a relay");
+  await new Promise((r) => setTimeout(r, 800)); // several beats, so the hub has answered at least once
   assert.doesNotMatch(relay.stderr(), /dropping socket/, "a healthy hub must not be dropped");
   hub.p.kill("SIGSTOP"); // socket stays open, nothing answers: a half-open hub
-  assert.ok(await until(() => /dropping socket/.test(relay.stderr())), "frozen hub must be dropped");
-  assert.ok(await until(() => /refused to relay/.test(relay.stderr())), "the redial against a frozen hub must time out and retry, not hang");
-  hub.p.kill("SIGCONT");
+  try {
+    assert.ok(await until(() => /dropping socket/.test(relay.stderr())), "frozen hub must be dropped");
+    assert.ok(await until(() => /refused to relay/.test(relay.stderr())), "the redial against a frozen hub must time out and retry, not hang");
+  } finally {
+    hub.p.kill("SIGCONT");
+  }
   assert.ok(await until(() => relay.stderr().match(/relaying through it/g)?.length >= 2), "relay must rejoin once the hub answers again");
   hub.stop(); relay.stop();
 });
